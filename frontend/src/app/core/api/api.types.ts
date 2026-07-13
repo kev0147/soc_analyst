@@ -1,0 +1,193 @@
+export interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+export interface User {
+  id: number;
+  email: string;
+  display_name: string;
+  role: 'admin' | 'analyst' | 'viewer';
+}
+
+export interface FlowImport {
+  id: number;
+  network: number;
+  status: string;
+  original_filename: string;
+  file_size_bytes: number;
+  uploaded_at: string;
+  period_start: string | null;
+  period_end: string | null;
+  total_rows: number;
+  accepted_rows: number;
+  inserted_flows: number;
+  reused_flows: number;
+  rejected_rows: number;
+}
+
+export interface Network {
+  id: number;
+  structure: number;
+  name: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+export interface Flow {
+  id: number;
+  sna_flow_id: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  direction: string;
+  src_ip: string;
+  src_hostname: string;
+  src_port: number | null;
+  dst_ip: string;
+  dst_hostname: string;
+  dst_port: number | null;
+  protocol: string;
+  service: string;
+  application: string;
+  total_bytes: number | null;
+  total_packets: number | null;
+}
+
+export interface DashboardOverview {
+  totals: {
+    flows: number;
+    total_bytes: number;
+    total_packets: number;
+    imports: number;
+    bulletins: number;
+    latest_flow_at: string | null;
+  };
+  top_talkers: Array<Record<string, unknown>>;
+  top_conversations: Array<Record<string, unknown>>;
+  top_ports_protocols: {
+    ports: Array<Record<string, unknown>>;
+    protocols: Array<Record<string, unknown>>;
+  };
+  latest_malicious_ips?: Array<Record<string, unknown>>;
+  hosts_communicating_with_malicious?: Array<Record<string, unknown>>;
+}
+
+export interface Bulletin {
+  id: number;
+  reference: string;
+  severity: string;
+  status: string;
+  sent_at: string | null;
+  created_at: string;
+  ips?: Array<{ ip_address: string; role: string }>;
+  risks?: Array<{ id: number; name: string }>;
+  bulletin_types?: Array<{ id: number; name: string }>;
+  recommendations?: Array<{ id: number; name: string; description?: string }>;
+  findings?: BulletinFinding[];
+}
+
+export interface CatalogItem {
+  id: number;
+  name: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+export interface RiskProfile {
+  id: number;
+  name: string;
+  impact: string;
+  recommendation: string;
+  default_severity: 'low' | 'medium' | 'high' | 'critical';
+  is_active: boolean;
+}
+
+export interface PeerObservation {
+  id: number;
+  network: number;
+  peer_reputation: number;
+  peer_ip: string;
+  peer_country?: string;
+  reputation_verdict: 'malicious' | 'suspicious' | 'clean' | 'unknown';
+  reputation_score?: number | null;
+  host_ip: string | null;
+  host_port: number | null;
+  host_service: string;
+  host_port_category: string;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  flow_count: number;
+  total_bytes: number;
+  total_packets: number;
+  total_duration_seconds: number;
+  max_duration_seconds: number | null;
+  avg_duration_seconds: number | null;
+}
+
+export interface BulletinFinding {
+  id: number;
+  peer_observation_id: number;
+  peer_ip: string;
+  peer_country?: string;
+  host_ip: string | null;
+  host_port: number | null;
+  host_service: string;
+  host_port_category: string;
+  flow_count: number;
+  total_bytes: number;
+  total_packets: number;
+  total_duration_seconds: number;
+  reputation_verdict: string;
+  reputation_score?: number | null;
+  risk_profile_id: number;
+  risk_name: string;
+  severity: string;
+  impact: string;
+  recommendation: string;
+}
+
+export interface TopPeer {
+  peer_ip: string;
+  country: string;
+  verdict: 'malicious' | 'suspicious' | 'clean' | 'unknown';
+  score: number | null;
+  source_count: number;
+  successful_source_count: number;
+  flow_count: number;
+  total_bytes: number;
+  total_packets: number;
+  total_duration_seconds: number;
+  max_duration_seconds: number | null;
+  avg_duration_seconds: number | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  host_count: number;
+  host_ips: string[];
+  host_ports: number[];
+  services: string[];
+}
+
+export interface IpAnalysisRecord {
+  id: number;
+  ip_address: string;
+  country?: string;
+  verdict: 'malicious' | 'suspicious' | 'clean' | 'unknown';
+  score?: number | null;
+  source_count: number;
+  successful_source_count: number;
+  flow_count: number;
+  last_seen_at?: string | null;
+  last_analyzed_at?: string | null;
+  results: Array<{
+    source: 'abuseipdb' | 'virustotal' | 'shodan';
+    status: 'success' | 'skipped' | 'error';
+    verdict: string;
+    score?: number | null;
+    country?: string;
+    error_message?: string;
+    analyzed_at?: string;
+  }>;
+}

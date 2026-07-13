@@ -1,0 +1,3 @@
+Flow ID,Start,Subject IP Address,Subject Orientation,Subject Port/Protocol,Peer IP Address,Peer Orientation,Peer Port/Protocol,protocol
+ok-1,2026-06-24T08:26:23.000+0000,10.10.1.20,Client,12345/TCP,203.0.113.5,Server,443/TCP,TCP
+bad-1,not-a-date,10.10.1.20,Client,12345/TCP,203.0.113.5,Server,443/TCP,TCP
