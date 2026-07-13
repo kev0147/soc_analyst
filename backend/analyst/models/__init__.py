@@ -1,6 +1,7 @@
 from .audit_event import AuditEvent
 from .bulletin import Bulletin
 from .bulletin_attachment import BulletinAttachment
+from .bulletin_finding import BulletinFinding
 from .bulletin_ip import BulletinIP
 from .bulletin_recommendation import BulletinRecommendation
 from .bulletin_response import BulletinResponse
@@ -10,11 +11,16 @@ from .bulletin_type_catalog import BulletinTypeCatalog
 from .flow import Flow
 from .flow_import import FlowImport
 from .flow_import_item import FlowImportItem
+from .ip_reputation import IPReputation
+from .ip_reputation_result import IPReputationResult
 from .network import Network
 from .network_cidr import NetworkCIDR
 from .password_reset_token import PasswordResetToken
+from .peer_observation import PeerObservation
+from .peer_observation_risk import PeerObservationRisk
 from .recommendation_catalog import RecommendationCatalog
 from .risk_catalog import RiskCatalog
+from .risk_profile import RiskProfile
 from .structure import Structure
 from .user import User
 
@@ -22,6 +28,7 @@ __all__ = [
     "AuditEvent",
     "Bulletin",
     "BulletinAttachment",
+    "BulletinFinding",
     "BulletinIP",
     "BulletinRecommendation",
     "BulletinResponse",
@@ -31,11 +38,16 @@ __all__ = [
     "Flow",
     "FlowImport",
     "FlowImportItem",
+    "IPReputation",
+    "IPReputationResult",
     "Network",
     "NetworkCIDR",
     "PasswordResetToken",
+    "PeerObservation",
+    "PeerObservationRisk",
     "RecommendationCatalog",
     "RiskCatalog",
+    "RiskProfile",
     "Structure",
     "User",
 ]

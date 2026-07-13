@@ -1,0 +1,37 @@
+AUDIT_ACTIONS = {
+    "AUTH_LOGIN_SUCCESS": "Connexion réussie",
+    "AUTH_LOGIN_FAILURE": "Échec de connexion",
+    "AUTH_LOGOUT": "Déconnexion",
+    "AUTH_PASSWORD_RESET_CREATED": "Lien temporaire de réinitialisation créé",
+    "AUTH_PASSWORD_RESET_USED": "Lien temporaire de réinitialisation utilisé",
+    "USER_CREATED": "Utilisateur créé",
+    "USER_UPDATED": "Utilisateur modifié",
+    "USER_DELETED": "Utilisateur supprimé",
+    "FLOW_IMPORT_PREVIEWED": "Prévalidation d'import CSV",
+    "FLOW_IMPORT_CONFIRMED": "Import CSV confirmé",
+    "FLOW_IMPORT_DELETED": "Import CSV supprimé",
+    "FLOW_IMPORT_REJECTIONS_DOWNLOADED": "Rapport de rejets téléchargé",
+    "FLOW_EXPORTED": "Flows exportés en CSV",
+    "IP_TIMELINE_VIEWED": "Timeline IP consultée",
+    "IP_REPUTATION_RECORDS_VIEWED": "Résultats réputation IP consultés",
+    "IP_REPUTATION_CANDIDATES_VIEWED": "Candidats réputation IP consultés",
+    "IP_REPUTATION_ANALYSIS_RUN": "Analyse réputation IP lancée",
+    "BULLETIN_CREATED": "Bulletin créé",
+    "BULLETIN_UPDATED": "Bulletin modifié",
+    "BULLETIN_DELETED": "Bulletin supprimé",
+    "BULLETIN_RESTORED": "Bulletin restauré",
+    "BULLETIN_DUPLICATE_CHECKED": "Doublon bulletin vérifié",
+    "BULLETIN_RESPONSE_CREATED": "Réponse bulletin créée",
+    "BULLETIN_RESPONSE_UPDATED": "Réponse bulletin modifiée",
+    "BULLETIN_RESPONSE_DELETED": "Réponse bulletin supprimée",
+    "ANALYTICS_TOP_TALKERS_VIEWED": "Top talkers consulté",
+    "ANALYTICS_TOP_CONVERSATIONS_VIEWED": "Top conversations consulté",
+    "ANALYTICS_TOP_PORTS_PROTOCOLS_VIEWED": "Top ports/protocoles consulté",
+    "DASHBOARD_OVERVIEW_VIEWED": "Dashboard consulté",
+    "AUDIT_EVENTS_VIEWED": "Journal d'audit consulté",
+    "SECURITY_PERMISSION_MATRIX_VIEWED": "Matrice de permissions consultée",
+}
+
+
+def audit_action_catalog() -> list[dict]:
+    return [{"action": action, "label": label} for action, label in sorted(AUDIT_ACTIONS.items())]

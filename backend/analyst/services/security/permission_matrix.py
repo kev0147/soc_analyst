@@ -1,0 +1,51 @@
+from analyst.models.choices import UserRole
+
+
+def permission_matrix() -> dict:
+    return {
+        UserRole.ADMIN: {
+            "users": ["create", "read", "update", "delete", "reset_password"],
+            "structures": ["create", "read", "update", "delete"],
+            "networks": ["create", "read", "update", "delete"],
+            "imports": ["preview", "confirm", "read", "delete", "download_rejections"],
+            "flows": ["read", "export"],
+            "bulletins": ["create", "read", "update", "delete", "restore", "check_duplicate"],
+            "responses": ["create", "read", "update", "delete"],
+            "catalogs": ["create", "read", "update", "disable"],
+            "analytics": ["read"],
+            "ip_reputation": ["read", "run"],
+            "dashboard": ["read"],
+            "audit": ["read"],
+            "security": ["read"],
+        },
+        UserRole.ANALYST: {
+            "users": ["read_own"],
+            "structures": ["read"],
+            "networks": ["read"],
+            "imports": ["preview", "confirm", "read", "delete", "download_rejections"],
+            "flows": ["read", "export"],
+            "bulletins": ["create", "read", "update", "delete", "restore", "check_duplicate"],
+            "responses": ["create", "read", "update", "delete"],
+            "catalogs": ["read"],
+            "analytics": ["read"],
+            "ip_reputation": ["read", "run"],
+            "dashboard": ["read"],
+            "audit": [],
+            "security": ["read_permissions"],
+        },
+        UserRole.VIEWER: {
+            "users": ["read_own"],
+            "structures": ["read"],
+            "networks": ["read"],
+            "imports": ["read"],
+            "flows": ["read", "export"],
+            "bulletins": ["read"],
+            "responses": ["read"],
+            "catalogs": ["read"],
+            "analytics": ["read"],
+            "ip_reputation": ["read"],
+            "dashboard": ["read"],
+            "audit": [],
+            "security": ["read_permissions"],
+        },
+    }

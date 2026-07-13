@@ -4,13 +4,19 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from .models import (
     AuditEvent,
     Bulletin,
+    BulletinFinding,
     BulletinTypeCatalog,
     Flow,
     FlowImport,
+    IPReputation,
+    IPReputationResult,
     Network,
     NetworkCIDR,
+    PeerObservation,
+    PeerObservationRisk,
     RecommendationCatalog,
     RiskCatalog,
+    RiskProfile,
     Structure,
     User,
 )
@@ -35,8 +41,14 @@ admin.site.register(Network)
 admin.site.register(NetworkCIDR)
 admin.site.register(FlowImport)
 admin.site.register(Flow)
+admin.site.register(IPReputation)
+admin.site.register(IPReputationResult)
 admin.site.register(Bulletin)
+admin.site.register(BulletinFinding)
 admin.site.register(BulletinTypeCatalog)
 admin.site.register(RiskCatalog)
+admin.site.register(RiskProfile)
+admin.site.register(PeerObservation)
+admin.site.register(PeerObservationRisk)
 admin.site.register(RecommendationCatalog)
 admin.site.register(AuditEvent)

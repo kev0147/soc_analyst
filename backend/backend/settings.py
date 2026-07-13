@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-r)@btrq48&jvt^cig8c&j!4pltz+%me7e$s#-ywt6=p5c@k09!
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 
 # Application definition
@@ -43,6 +43,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'analyst.middleware.LocalDevCORSMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -118,6 +119,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = 'media/'
 
 AUTH_USER_MODEL = 'analyst.User'
 
@@ -138,3 +141,17 @@ SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
+
+LOCAL_DEV_CORS_ORIGINS = {
+    'http://localhost:4200',
+    'http://127.0.0.1:4200',
+}
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:4200',
+    'http://127.0.0.1:4200',
+]
+
+ABUSEIPDB_API_KEY = ''
+VIRUSTOTAL_API_KEY = ''
+SHODAN_API_KEY = ''
+IP_REPUTATION_TIMEOUT_SECONDS = 20

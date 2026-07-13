@@ -1,6 +1,7 @@
 from .audit_event import AuditEventSerializer
 from .bulletin import BulletinSerializer
 from .bulletin_attachment import BulletinAttachmentSerializer
+from .bulletin_finding import BulletinFindingSerializer
 from .bulletin_ip import BulletinIPSerializer
 from .bulletin_recommendation import BulletinRecommendationSerializer
 from .bulletin_response import BulletinResponseSerializer
@@ -10,11 +11,16 @@ from .bulletin_type_catalog import BulletinTypeCatalogSerializer
 from .flow import FlowSerializer
 from .flow_import import FlowImportSerializer
 from .flow_import_item import FlowImportItemSerializer
+from .ip_reputation import IPReputationSerializer
+from .ip_reputation_result import IPReputationResultSerializer
 from .network import NetworkSerializer
 from .network_cidr import NetworkCIDRSerializer
 from .password_reset_token import PasswordResetTokenSerializer
+from .peer_observation import PeerObservationSerializer
+from .peer_observation_risk import PeerObservationRiskSerializer
 from .recommendation_catalog import RecommendationCatalogSerializer
 from .risk_catalog import RiskCatalogSerializer
+from .risk_profile import RiskProfileSerializer
 from .structure import StructureSerializer
 from .user import UserSerializer
 

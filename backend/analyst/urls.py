@@ -32,15 +32,21 @@ from analyst.controllers.flow_import.list import FlowImportListController
 from analyst.controllers.flow_import.retrieve import FlowImportRetrieveController
 from analyst.controllers.flow_import.create import FlowImportCreateController
 from analyst.controllers.flow_import.delete import FlowImportDeleteController
+from analyst.controllers.flow_import.preview import FlowImportPreviewController
+from analyst.controllers.flow_import.confirm import FlowImportConfirmController
+from analyst.controllers.flow_import.download_rejections import FlowImportDownloadRejectionsController
 from analyst.controllers.flow.list import FlowListController
 from analyst.controllers.flow.retrieve import FlowRetrieveController
+from analyst.controllers.flow.export import FlowExportController
 from analyst.controllers.flow_import_item.list import FlowImportItemListController
 from analyst.controllers.flow_import_item.retrieve import FlowImportItemRetrieveController
 from analyst.controllers.bulletin.list import BulletinListController
 from analyst.controllers.bulletin.retrieve import BulletinRetrieveController
 from analyst.controllers.bulletin.create import BulletinCreateController
+from analyst.controllers.bulletin.from_findings import BulletinFromFindingsController
 from analyst.controllers.bulletin.update import BulletinUpdateController
 from analyst.controllers.bulletin.delete import BulletinDeleteController
+from analyst.controllers.bulletin.check_duplicate import BulletinCheckDuplicateController
 from analyst.controllers.bulletin_ip.list import BulletinIPListController
 from analyst.controllers.bulletin_ip.retrieve import BulletinIPRetrieveController
 from analyst.controllers.bulletin_ip.create import BulletinIPCreateController
@@ -84,6 +90,39 @@ from analyst.controllers.bulletin_attachment.create import BulletinAttachmentCre
 from analyst.controllers.bulletin_attachment.delete import BulletinAttachmentDeleteController
 from analyst.controllers.audit_event.list import AuditEventListController
 from analyst.controllers.audit_event.retrieve import AuditEventRetrieveController
+from analyst.controllers.audit_event.actions import AuditEventActionsController
+from analyst.controllers.ip_intelligence.timeline import IPTimelineController
+from analyst.controllers.analytics.top_talkers import TopTalkersController
+from analyst.controllers.analytics.top_peers import TopPeersController
+from analyst.controllers.analytics.top_conversations import TopConversationsController
+from analyst.controllers.analytics.top_ports_protocols import TopPortsProtocolsController
+from analyst.controllers.dashboard.overview import DashboardOverviewController
+from analyst.controllers.security.permission_matrix import PermissionMatrixController
+from analyst.controllers.ip_analysis.records import IPAnalysisRecordsController
+from analyst.controllers.ip_analysis.run import IPAnalysisRunController
+from analyst.controllers.ip_analysis.candidates import IPAnalysisCandidatesController
+from analyst.controllers.risk_profile.list import RiskProfileListController
+from analyst.controllers.risk_profile.retrieve import RiskProfileRetrieveController
+from analyst.controllers.risk_profile.create import RiskProfileCreateController
+from analyst.controllers.risk_profile.update import RiskProfileUpdateController
+from analyst.controllers.risk_profile.delete import RiskProfileDeleteController
+from analyst.controllers.peer_observation.list import PeerObservationListController
+from analyst.controllers.peer_observation.retrieve import PeerObservationRetrieveController
+from analyst.controllers.peer_observation.create import PeerObservationCreateController
+from analyst.controllers.peer_observation.update import PeerObservationUpdateController
+from analyst.controllers.peer_observation.delete import PeerObservationDeleteController
+from analyst.controllers.peer_observation.sync import PeerObservationSyncController
+from analyst.controllers.peer_observation.suggestions import PeerObservationSuggestionsController
+from analyst.controllers.peer_observation_risk.list import PeerObservationRiskListController
+from analyst.controllers.peer_observation_risk.retrieve import PeerObservationRiskRetrieveController
+from analyst.controllers.peer_observation_risk.create import PeerObservationRiskCreateController
+from analyst.controllers.peer_observation_risk.update import PeerObservationRiskUpdateController
+from analyst.controllers.peer_observation_risk.delete import PeerObservationRiskDeleteController
+from analyst.controllers.bulletin_finding.list import BulletinFindingListController
+from analyst.controllers.bulletin_finding.retrieve import BulletinFindingRetrieveController
+from analyst.controllers.bulletin_finding.create import BulletinFindingCreateController
+from analyst.controllers.bulletin_finding.update import BulletinFindingUpdateController
+from analyst.controllers.bulletin_finding.delete import BulletinFindingDeleteController
 
 app_name = "analyst"
 
@@ -92,6 +131,7 @@ urlpatterns = [
     path("auth/logout/", LogoutController.as_view(), name="logout"),
     path("auth/me/", CurrentUserController.as_view(), name="current-user"),
     path("auth/password-reset/consume/", PasswordResetTokenConsumeController.as_view(), name="password-reset-consume"),
+    path("security/permission-matrix/", PermissionMatrixController.as_view(), name="permission-matrix"),
     path("users/", UserListController.as_view(), name="user-list"),
     path("users/<int:pk>/", UserRetrieveController.as_view(), name="user-retrieve"),
     path("users/create/", UserCreateController.as_view(), name="user-create"),
@@ -117,15 +157,30 @@ urlpatterns = [
     path("network-cidrs/<int:pk>/delete/", NetworkCIDRDeleteController.as_view(), name="network_cidr-delete"),
     path("flow-imports/", FlowImportListController.as_view(), name="flow_import-list"),
     path("flow-imports/<int:pk>/", FlowImportRetrieveController.as_view(), name="flow_import-retrieve"),
+    path("flow-imports/preview/", FlowImportPreviewController.as_view(), name="flow_import-preview"),
+    path("flow-imports/confirm/", FlowImportConfirmController.as_view(), name="flow_import-confirm"),
+    path("flow-imports/<int:pk>/rejections/", FlowImportDownloadRejectionsController.as_view(), name="flow_import-rejections"),
     path("flow-imports/create/", FlowImportCreateController.as_view(), name="flow_import-create"),
     path("flow-imports/<int:pk>/delete/", FlowImportDeleteController.as_view(), name="flow_import-delete"),
     path("flows/", FlowListController.as_view(), name="flow-list"),
+    path("flows/export/", FlowExportController.as_view(), name="flow-export"),
     path("flows/<int:pk>/", FlowRetrieveController.as_view(), name="flow-retrieve"),
+    path("ips/<str:ip>/timeline/", IPTimelineController.as_view(), name="ip-timeline"),
+    path("ip-analysis/records/", IPAnalysisRecordsController.as_view(), name="ip-analysis-records"),
+    path("ip-analysis/run/", IPAnalysisRunController.as_view(), name="ip-analysis-run"),
+    path("ip-analysis/candidates/", IPAnalysisCandidatesController.as_view(), name="ip-analysis-candidates"),
+    path("analytics/top-talkers/", TopTalkersController.as_view(), name="top-talkers"),
+    path("analytics/top-peers/", TopPeersController.as_view(), name="top-peers"),
+    path("analytics/top-conversations/", TopConversationsController.as_view(), name="top-conversations"),
+    path("analytics/top-ports-protocols/", TopPortsProtocolsController.as_view(), name="top-ports-protocols"),
+    path("dashboard/overview/", DashboardOverviewController.as_view(), name="dashboard-overview"),
     path("flow-import-items/", FlowImportItemListController.as_view(), name="flow_import_item-list"),
     path("flow-import-items/<int:pk>/", FlowImportItemRetrieveController.as_view(), name="flow_import_item-retrieve"),
     path("bulletins/", BulletinListController.as_view(), name="bulletin-list"),
     path("bulletins/<int:pk>/", BulletinRetrieveController.as_view(), name="bulletin-retrieve"),
+    path("bulletins/check-duplicate/", BulletinCheckDuplicateController.as_view(), name="bulletin-check-duplicate"),
     path("bulletins/create/", BulletinCreateController.as_view(), name="bulletin-create"),
+    path("bulletins/from-findings/", BulletinFromFindingsController.as_view(), name="bulletin-from-findings"),
     path("bulletins/<int:pk>/update/", BulletinUpdateController.as_view(), name="bulletin-update"),
     path("bulletins/<int:pk>/delete/", BulletinDeleteController.as_view(), name="bulletin-delete"),
     path("bulletins/<int:pk>/restore/", BulletinRestoreController.as_view(), name="bulletin-restore"),
@@ -149,6 +204,28 @@ urlpatterns = [
     path("recommendations/create/", RecommendationCatalogCreateController.as_view(), name="recommendation_catalog-create"),
     path("recommendations/<int:pk>/update/", RecommendationCatalogUpdateController.as_view(), name="recommendation_catalog-update"),
     path("recommendations/<int:pk>/delete/", RecommendationCatalogDeleteController.as_view(), name="recommendation_catalog-delete"),
+    path("risk-profiles/", RiskProfileListController.as_view(), name="risk_profile-list"),
+    path("risk-profiles/<int:pk>/", RiskProfileRetrieveController.as_view(), name="risk_profile-retrieve"),
+    path("risk-profiles/create/", RiskProfileCreateController.as_view(), name="risk_profile-create"),
+    path("risk-profiles/<int:pk>/update/", RiskProfileUpdateController.as_view(), name="risk_profile-update"),
+    path("risk-profiles/<int:pk>/delete/", RiskProfileDeleteController.as_view(), name="risk_profile-delete"),
+    path("peer-observations/", PeerObservationListController.as_view(), name="peer_observation-list"),
+    path("peer-observations/sync/", PeerObservationSyncController.as_view(), name="peer_observation-sync"),
+    path("peer-observations/suggestions/", PeerObservationSuggestionsController.as_view(), name="peer_observation-suggestions"),
+    path("peer-observations/<int:pk>/", PeerObservationRetrieveController.as_view(), name="peer_observation-retrieve"),
+    path("peer-observations/create/", PeerObservationCreateController.as_view(), name="peer_observation-create"),
+    path("peer-observations/<int:pk>/update/", PeerObservationUpdateController.as_view(), name="peer_observation-update"),
+    path("peer-observations/<int:pk>/delete/", PeerObservationDeleteController.as_view(), name="peer_observation-delete"),
+    path("peer-observation-risks/", PeerObservationRiskListController.as_view(), name="peer_observation_risk-list"),
+    path("peer-observation-risks/<int:pk>/", PeerObservationRiskRetrieveController.as_view(), name="peer_observation_risk-retrieve"),
+    path("peer-observation-risks/create/", PeerObservationRiskCreateController.as_view(), name="peer_observation_risk-create"),
+    path("peer-observation-risks/<int:pk>/update/", PeerObservationRiskUpdateController.as_view(), name="peer_observation_risk-update"),
+    path("peer-observation-risks/<int:pk>/delete/", PeerObservationRiskDeleteController.as_view(), name="peer_observation_risk-delete"),
+    path("bulletin-findings/", BulletinFindingListController.as_view(), name="bulletin_finding-list"),
+    path("bulletin-findings/<int:pk>/", BulletinFindingRetrieveController.as_view(), name="bulletin_finding-retrieve"),
+    path("bulletin-findings/create/", BulletinFindingCreateController.as_view(), name="bulletin_finding-create"),
+    path("bulletin-findings/<int:pk>/update/", BulletinFindingUpdateController.as_view(), name="bulletin_finding-update"),
+    path("bulletin-findings/<int:pk>/delete/", BulletinFindingDeleteController.as_view(), name="bulletin_finding-delete"),
     path("bulletin-type-links/", BulletinTypeListController.as_view(), name="bulletin_type-list"),
     path("bulletin-type-links/<int:pk>/", BulletinTypeRetrieveController.as_view(), name="bulletin_type-retrieve"),
     path("bulletin-type-links/create/", BulletinTypeCreateController.as_view(), name="bulletin_type-create"),
@@ -171,5 +248,6 @@ urlpatterns = [
     path("bulletin-attachments/create/", BulletinAttachmentCreateController.as_view(), name="bulletin_attachment-create"),
     path("bulletin-attachments/<int:pk>/delete/", BulletinAttachmentDeleteController.as_view(), name="bulletin_attachment-delete"),
     path("audit-events/", AuditEventListController.as_view(), name="audit_event-list"),
+    path("audit-events/actions/", AuditEventActionsController.as_view(), name="audit_event-actions"),
     path("audit-events/<int:pk>/", AuditEventRetrieveController.as_view(), name="audit_event-retrieve"),
 ]

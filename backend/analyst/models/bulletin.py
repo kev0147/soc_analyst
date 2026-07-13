@@ -11,6 +11,14 @@ from .choices import BulletinSeverity, BulletinStatus
 
 class Bulletin(TimestampedModel):
     structure = models.ForeignKey("analyst.Structure", on_delete=models.PROTECT, related_name="bulletins")
+    network = models.ForeignKey(
+        "analyst.Network",
+        on_delete=models.PROTECT,
+        related_name="bulletins",
+        null=True,
+        blank=True,
+    )
+    external_reference = models.CharField(max_length=128, blank=True, db_index=True)
     reference_year = models.PositiveIntegerField(editable=False)
     sequence_number = models.PositiveIntegerField(editable=False)
     reference = models.CharField(max_length=80, unique=True, editable=False)
@@ -37,7 +45,11 @@ class Bulletin(TimestampedModel):
                 name="uniq_bulletin_sequence_per_year",
             )
         ]
-        indexes = [models.Index(fields=("structure", "ip_signature")), models.Index(fields=("status",))]
+        indexes = [
+            models.Index(fields=("structure", "ip_signature")),
+            models.Index(fields=("network", "status")),
+            models.Index(fields=("status",)),
+        ]
 
     def save(self, *args, **kwargs):
         if not self.reference:
@@ -54,7 +66,7 @@ class Bulletin(TimestampedModel):
         return super().save(*args, **kwargs)
 
     def refresh_ip_signature(self):
-        parts = sorted(f"{item.role}:{item.ip_address}" for item in self.ip_addresses.all())
+        parts = sorted(f"{item.role}:{item.ip_address}:{item.port or ''}" for item in self.ip_addresses.all())
         signature = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest() if parts else ""
         if signature != self.ip_signature:
             Bulletin.objects.filter(pk=self.pk).update(ip_signature=signature)
@@ -62,4 +74,3 @@ class Bulletin(TimestampedModel):
 
     def __str__(self):
         return self.reference
-

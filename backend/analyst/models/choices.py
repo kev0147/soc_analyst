@@ -52,3 +52,21 @@ class BulletinIPRole(models.TextChoices):
     SOURCE = "source", "Source"
     DESTINATION = "destination", "Destination"
 
+
+class ReputationSource(models.TextChoices):
+    ABUSEIPDB = "abuseipdb", "AbuseIPDB"
+    VIRUSTOTAL = "virustotal", "VirusTotal"
+    SHODAN = "shodan", "Shodan"
+
+
+class ReputationVerdict(models.TextChoices):
+    MALICIOUS = "malicious", "Malveillant"
+    SUSPICIOUS = "suspicious", "Suspect"
+    CLEAN = "clean", "Propre"
+    UNKNOWN = "unknown", "Inconnu"
+
+
+class ReputationStatus(models.TextChoices):
+    SUCCESS = "success", "Succès"
+    SKIPPED = "skipped", "Ignoré"
+    ERROR = "error", "Erreur"
