@@ -10,13 +10,7 @@ import { AuthService } from '../../core/auth/auth.service';
   template: `
     <main class="login">
       <section class="card">
-        <div class="brand">
-          <div class="mark">D</div>
-          <div>
-            <h1>SOC Analyst</h1>
-            <p>Connexion analyste</p>
-          </div>
-        </div>
+        <h1>Connexion</h1>
 
         <form (ngSubmit)="submit()">
           <label class="field">
@@ -47,29 +41,9 @@ import { AuthService } from '../../core/auth/auth.service';
     .card {
       width: min(440px, 100%);
     }
-    .brand {
-      display: flex;
-      gap: 14px;
-      align-items: center;
-      margin-bottom: 24px;
-    }
-    .mark {
-      width: 52px;
-      height: 52px;
-      border-radius: 18px;
-      display: grid;
-      place-items: center;
-      background: var(--brand);
-      color: #211600;
-      font-weight: 900;
-      font-size: 22px;
-    }
-    h1,
-    p {
-      margin: 0;
-    }
-    p {
-      color: var(--muted);
+    h1 {
+      margin: 0 0 24px;
+      font-size: 24px;
     }
     form {
       display: grid;

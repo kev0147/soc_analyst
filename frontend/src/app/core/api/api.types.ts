@@ -14,7 +14,7 @@ export interface User {
 
 export interface FlowImport {
   id: number;
-  network: number;
+  structure: number;
   status: string;
   original_filename: string;
   file_size_bytes: number;
@@ -26,6 +26,14 @@ export interface FlowImport {
   inserted_flows: number;
   reused_flows: number;
   rejected_rows: number;
+}
+
+export interface Structure {
+  id: number;
+  name: string;
+  code: string;
+  description?: string;
+  is_active?: boolean;
 }
 
 export interface Network {

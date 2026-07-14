@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
-import { FlowImport, Network } from '../../core/api/api.types';
+import { FlowImport, Structure } from '../../core/api/api.types';
 import { formatBytes } from '../../shared/formatters';
 
 @Component({
@@ -23,10 +23,10 @@ import { formatBytes } from '../../shared/formatters';
         <h2>Upload CSV</h2>
         <div class="toolbar">
           <label class="field">
-            <span>Réseau</span>
-            <select class="select" [(ngModel)]="networkId">
-              @for (network of networks(); track network.id) {
-                <option [ngValue]="network.id">#{{ network.id }} — {{ network.name }}</option>
+            <span>Structure</span>
+            <select class="select" [(ngModel)]="structureId">
+              @for (structure of structures(); track structure.id) {
+                <option [ngValue]="structure.id">{{ structure.code }} — {{ structure.name }}</option>
               }
             </select>
           </label>
@@ -34,7 +34,7 @@ import { formatBytes } from '../../shared/formatters';
             <span>Fichier CSV</span>
             <input class="input" type="file" accept=".csv,text/csv" (change)="selectFile($event)" />
           </label>
-          <button class="btn" (click)="preview()" [disabled]="!file() || !networkId">Prévalider</button>
+          <button class="btn" (click)="preview()" [disabled]="!file() || !structureId">Prévalider</button>
           @if (previewImportId()) {
             <button class="btn secondary" (click)="confirm()">Confirmer import #{{ previewImportId() }}</button>
           }
@@ -51,6 +51,7 @@ import { formatBytes } from '../../shared/formatters';
             <thead>
               <tr>
                 <th>ID</th>
+                <th>Structure</th>
                 <th>Status</th>
                 <th>Fichier</th>
                 <th>Taille</th>
@@ -66,6 +67,7 @@ import { formatBytes } from '../../shared/formatters';
               @for (item of imports(); track item.id) {
                 <tr>
                   <td>#{{ item.id }}</td>
+                  <td>{{ structureLabel(item.structure) }}</td>
                   <td><span class="badge" [class.success]="item.status === 'completed'" [class.warning]="item.status.includes('errors')" [class.danger]="item.status === 'failed'">{{ item.status }}</span></td>
                   <td>{{ item.original_filename }}</td>
                   <td>{{ bytes(item.file_size_bytes) }}</td>
@@ -77,7 +79,7 @@ import { formatBytes } from '../../shared/formatters';
                   <td>{{ item.period_end ? (item.period_end | date:'medium') : '-' }}</td>
                 </tr>
               } @empty {
-                <tr><td colspan="10"><div class="empty">Aucun import.</div></td></tr>
+                <tr><td colspan="11"><div class="empty">Aucun import.</div></td></tr>
               }
             </tbody>
           </table>
@@ -89,19 +91,19 @@ import { formatBytes } from '../../shared/formatters';
 export class ImportsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   readonly imports = signal<FlowImport[]>([]);
-  readonly networks = signal<Network[]>([]);
+  readonly structures = signal<Structure[]>([]);
   readonly file = signal<File | null>(null);
   readonly message = signal('');
   readonly previewImportId = signal<number | null>(null);
   readonly bytes = formatBytes;
-  networkId = 1;
+  structureId = 0;
 
   ngOnInit() {
     this.load();
-    this.api.networks().subscribe((data) => {
-      this.networks.set(data.results);
+    this.api.structures({ is_active: true }).subscribe((data) => {
+      this.structures.set(data.results);
       if (data.results.length) {
-        this.networkId = data.results[0].id;
+        this.structureId = data.results[0].id;
       }
     });
   }
@@ -120,11 +122,15 @@ export class ImportsPageComponent implements OnInit {
     const file = this.file();
     if (!file) return;
     this.message.set('Prévalidation en cours...');
-    this.api.previewImport(this.networkId, file).subscribe({
+    this.api.previewImport(this.structureId, file).subscribe({
       next: (result: any) => {
         this.previewImportId.set(result.import_id);
         if (result.is_valid) {
-          this.message.set('Prévalidation OK. Tu peux confirmer.');
+          const networks = (result.network_detection?.networks || [])
+            .map((item: any) => `${item.name}: ${item.sample_rows}`)
+            .join(', ');
+          const rejected = result.network_detection?.sample_rejections?.length || 0;
+          this.message.set(`Prévalidation OK. Réseaux détectés dans l'échantillon : ${networks || 'aucun'}${rejected ? `; ${rejected} ligne(s) non classée(s)` : ''}. Tu peux confirmer.`);
         } else {
           const missing = result.errors?.[0]?.columns?.join(', ') || '-';
           this.message.set(`Prévalidation avec erreurs. Colonnes manquantes : ${missing}`);
@@ -157,9 +163,14 @@ export class ImportsPageComponent implements OnInit {
     if (body?.file?.length) {
       return `Fichier : ${body.file.join(', ')}`;
     }
-    if (body?.network_id?.length) {
-      return `Réseau : ${body.network_id.join(', ')}`;
+    if (body?.structure_id?.length) {
+      return `Structure : ${body.structure_id.join(', ')}`;
     }
     return fallback;
+  }
+
+  structureLabel(id: number): string {
+    const structure = this.structures().find((item) => item.id === id);
+    return structure ? `${structure.code} — ${structure.name}` : `#${id}`;
   }
 }

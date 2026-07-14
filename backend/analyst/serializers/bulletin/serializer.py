@@ -3,7 +3,6 @@ from rest_framework import serializers
 from analyst.models import (
     Bulletin,
     BulletinTypeCatalog,
-    Network,
     PeerObservation,
     RecommendationCatalog,
     RiskCatalog,
@@ -89,12 +88,6 @@ class BulletinIPInputSerializer(serializers.Serializer):
 
 class BulletinCreateInputSerializer(serializers.Serializer):
     structure_id = serializers.PrimaryKeyRelatedField(queryset=Structure.objects.filter(is_active=True), source="structure")
-    network_id = serializers.PrimaryKeyRelatedField(
-        queryset=Network.objects.filter(is_active=True),
-        source="network",
-        required=False,
-        allow_null=True,
-    )
     external_reference = serializers.CharField(required=False, allow_blank=True, max_length=128)
     severity = serializers.ChoiceField(choices=Bulletin._meta.get_field("severity").choices)
     status = serializers.ChoiceField(choices=Bulletin._meta.get_field("status").choices, required=False)
@@ -142,22 +135,8 @@ class BulletinCreateInputSerializer(serializers.Serializer):
             raise serializers.ValidationError("Au moins un risque doit être lié au bulletin.")
         return value
 
-    def validate(self, attrs):
-        network = attrs.get("network")
-        structure = attrs.get("structure")
-        if network and structure and network.structure_id != structure.id:
-            raise serializers.ValidationError({"network_id": "Le réseau doit appartenir à la structure du bulletin."})
-        return attrs
-
-
 class BulletinFromFindingsInputSerializer(serializers.Serializer):
     structure_id = serializers.PrimaryKeyRelatedField(queryset=Structure.objects.filter(is_active=True), source="structure")
-    network_id = serializers.PrimaryKeyRelatedField(
-        queryset=Network.objects.filter(is_active=True),
-        source="network",
-        required=False,
-        allow_null=True,
-    )
     external_reference = serializers.CharField(required=False, allow_blank=True, max_length=128)
     severity = serializers.ChoiceField(choices=Bulletin._meta.get_field("severity").choices, required=False)
     status = serializers.ChoiceField(choices=Bulletin._meta.get_field("status").choices, required=False)
@@ -186,7 +165,6 @@ class BulletinFromFindingsInputSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         structure = attrs["structure"]
-        network = attrs.get("network")
         observations = attrs.get("peer_observations", [])
 
         invalid_structure = [
@@ -197,12 +175,4 @@ class BulletinFromFindingsInputSerializer(serializers.Serializer):
                 {"peer_observation_ids": "Toutes les observations doivent appartenir à la structure du bulletin."}
             )
 
-        if network:
-            if network.structure_id != structure.id:
-                raise serializers.ValidationError({"network_id": "Le réseau doit appartenir à la structure du bulletin."})
-            invalid_network = [observation.id for observation in observations if observation.network_id != network.id]
-            if invalid_network:
-                raise serializers.ValidationError(
-                    {"peer_observation_ids": "Toutes les observations doivent appartenir au réseau choisi."}
-                )
         return attrs

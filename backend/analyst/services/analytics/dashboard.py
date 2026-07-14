@@ -27,10 +27,10 @@ def _imports(params):
     queryset = FlowImport.objects.all()
     structure_id = int_param(params, "structure_id")
     if structure_id is not None:
-        queryset = queryset.filter(network__structure_id=structure_id)
+        queryset = queryset.filter(structure_id=structure_id)
     network_id = int_param(params, "network_id")
     if network_id is not None:
-        queryset = queryset.filter(network_id=network_id)
+        queryset = queryset.filter(items__flow__network_id=network_id).distinct()
     return queryset
 
 
@@ -38,7 +38,8 @@ def _count_map(queryset, field: str) -> dict:
     return {row[field]: row["count"] for row in queryset.values(field).annotate(count=Count("id")).order_by(field)}
 
 
-def _latest_malicious_ips(limit: int = 10) -> list[dict]:
+def _latest_malicious_ips(flows, limit: int = 10) -> list[dict]:
+    visible_ips = Q(ip_address__in=flows.values("src_ip")) | Q(ip_address__in=flows.values("dst_ip"))
     return [
         {
             "ip_address": item.ip_address,
@@ -48,7 +49,7 @@ def _latest_malicious_ips(limit: int = 10) -> list[dict]:
             "last_seen_at": item.last_seen_at.isoformat() if item.last_seen_at else None,
             "last_analyzed_at": item.last_analyzed_at.isoformat() if item.last_analyzed_at else None,
         }
-        for item in IPReputation.objects.filter(verdict=ReputationVerdict.MALICIOUS)
+        for item in IPReputation.objects.filter(visible_ips, verdict=ReputationVerdict.MALICIOUS)
         .order_by("-last_seen_at", "-last_analyzed_at", "ip_address")[:limit]
     ]
 
@@ -92,6 +93,12 @@ def build_dashboard_overview(params) -> dict:
     )
     bulletins = _bulletins(params)
     imports = _imports(params)
+    structure_id = int_param(params, "structure_id")
+    structures = Structure.objects.filter(is_active=True)
+    networks = Network.objects.filter(is_active=True)
+    if structure_id is not None:
+        structures = structures.filter(id=structure_id)
+        networks = networks.filter(structure_id=structure_id)
 
     return {
         "scope": {
@@ -101,8 +108,8 @@ def build_dashboard_overview(params) -> dict:
             "started_to": params.get("started_to") or None,
         },
         "totals": {
-            "structures": Structure.objects.filter(is_active=True).count(),
-            "networks": Network.objects.filter(is_active=True).count(),
+            "structures": structures.count(),
+            "networks": networks.count(),
             "flows": flow_totals["flow_count"],
             "total_bytes": flow_totals["total_bytes"],
             "total_packets": flow_totals["total_packets"],
@@ -114,7 +121,7 @@ def build_dashboard_overview(params) -> dict:
         "bulletins_by_status": _count_map(bulletins, "status"),
         "bulletins_by_severity": _count_map(bulletins, "severity"),
         "imports_by_status": _count_map(imports, "status"),
-        "latest_malicious_ips": _latest_malicious_ips(),
+        "latest_malicious_ips": _latest_malicious_ips(flows),
         "hosts_communicating_with_malicious": _hosts_communicating_with_malicious(flows),
         "top_talkers": top_talkers(params)["results"],
         "top_conversations": top_conversations(params)["results"],

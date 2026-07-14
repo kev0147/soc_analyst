@@ -11,13 +11,6 @@ from .choices import BulletinSeverity, BulletinStatus
 
 class Bulletin(TimestampedModel):
     structure = models.ForeignKey("analyst.Structure", on_delete=models.PROTECT, related_name="bulletins")
-    network = models.ForeignKey(
-        "analyst.Network",
-        on_delete=models.PROTECT,
-        related_name="bulletins",
-        null=True,
-        blank=True,
-    )
     external_reference = models.CharField(max_length=128, blank=True, db_index=True)
     reference_year = models.PositiveIntegerField(editable=False)
     sequence_number = models.PositiveIntegerField(editable=False)
@@ -47,7 +40,6 @@ class Bulletin(TimestampedModel):
         ]
         indexes = [
             models.Index(fields=("structure", "ip_signature")),
-            models.Index(fields=("network", "status")),
             models.Index(fields=("status",)),
         ]
 

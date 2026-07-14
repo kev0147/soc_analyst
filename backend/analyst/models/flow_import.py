@@ -5,7 +5,7 @@ from .choices import ImportStatus
 
 
 class FlowImport(models.Model):
-    network = models.ForeignKey("analyst.Network", on_delete=models.PROTECT, related_name="imports")
+    structure = models.ForeignKey("analyst.Structure", on_delete=models.PROTECT, related_name="flow_imports")
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="flow_imports")
     status = models.CharField(max_length=32, choices=ImportStatus.choices, default=ImportStatus.PENDING)
     original_filename = models.CharField(max_length=255)
@@ -30,11 +30,10 @@ class FlowImport(models.Model):
     class Meta:
         ordering = ("-uploaded_at",)
         indexes = [
-            models.Index(fields=("network", "uploaded_at")),
+            models.Index(fields=("structure", "uploaded_at")),
             models.Index(fields=("file_sha256",)),
             models.Index(fields=("status",)),
         ]
 
     def __str__(self):
         return f"{self.original_filename} — {self.get_status_display()}"
-

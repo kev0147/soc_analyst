@@ -32,7 +32,6 @@ def create_bulletin_with_links(data: dict, user, force_duplicate: bool = False) 
 
     bulletin = Bulletin.objects.create(
         structure=data["structure"],
-        network=data.get("network"),
         external_reference=data.get("external_reference", ""),
         severity=data["severity"],
         status=data.get("status") or Bulletin._meta.get_field("status").default,
@@ -82,15 +81,8 @@ def create_bulletin_from_findings(data: dict, user, force_duplicate: bool = Fals
     if duplicates and not force_duplicate:
         return None, duplicates
 
-    network = data.get("network")
-    if network is None:
-        network_ids = {observation.network_id for observation in observations}
-        if len(network_ids) == 1:
-            network = observations[0].network
-
     bulletin = Bulletin.objects.create(
         structure=data["structure"],
-        network=network,
         external_reference=data.get("external_reference", ""),
         severity=data.get("severity") or _highest_severity(risk_profiles),
         status=data.get("status") or Bulletin._meta.get_field("status").default,

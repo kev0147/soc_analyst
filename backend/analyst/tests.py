@@ -14,6 +14,7 @@ from .models import (
     BulletinResponse,
     BulletinTypeCatalog,
     Flow,
+    FlowImport,
     IPReputation,
     Network,
     NetworkCIDR,
@@ -86,7 +87,6 @@ class CoreModelTests(TestCase):
     def test_bulletin_reference_and_ip_signature(self):
         bulletin = Bulletin.objects.create(
             structure=self.structure,
-            network=self.network,
             external_reference="OLD-REF-001",
             severity=BulletinSeverity.HIGH,
             created_by=self.user,
@@ -101,7 +101,6 @@ class CoreModelTests(TestCase):
         bulletin.refresh_from_db()
         self.assertRegex(bulletin.reference, r"^TEST-\d{4}-001$")
         self.assertEqual(len(bulletin.ip_signature), 64)
-        self.assertEqual(bulletin.network, self.network)
         self.assertEqual(bulletin.external_reference, "OLD-REF-001")
 
     def test_risk_profile_peer_observation_and_bulletin_finding_defaults(self):
@@ -134,7 +133,6 @@ class CoreModelTests(TestCase):
         )
         bulletin = Bulletin.objects.create(
             structure=self.structure,
-            network=self.network,
             severity=BulletinSeverity.HIGH,
             created_by=self.user,
             updated_by=self.user,
@@ -235,11 +233,11 @@ class FlowImportServiceTests(TestCase):
         )
 
         with self.settings(MEDIA_ROOT=TEST_MEDIA_ROOT):
-            preview = preview_flow_import_upload(self._csv_upload(csv_body), self.network, self.user)
+            preview = preview_flow_import_upload(self._csv_upload(csv_body), self.structure, self.user)
             self.assertTrue(preview["is_valid"])
             self.assertEqual(preview["preview_rows"][0]["row_number"], 2)
 
-            flow_import = confirm_flow_import(self.network.imports.get(pk=preview["import_id"]))
+            flow_import = confirm_flow_import(FlowImport.objects.get(pk=preview["import_id"]))
 
         self.assertEqual(flow_import.status, ImportStatus.COMPLETED)
         self.assertEqual(flow_import.total_rows, 1)
@@ -265,13 +263,101 @@ class FlowImportServiceTests(TestCase):
         )
 
         with self.settings(MEDIA_ROOT=TEST_MEDIA_ROOT):
-            preview = preview_flow_import_upload(self._csv_upload(csv_body), self.network, self.user)
-            flow_import = confirm_flow_import(self.network.imports.get(pk=preview["import_id"]))
+            preview = preview_flow_import_upload(self._csv_upload(csv_body), self.structure, self.user)
+            flow_import = confirm_flow_import(FlowImport.objects.get(pk=preview["import_id"]))
 
         self.assertEqual(flow_import.status, ImportStatus.COMPLETED_WITH_ERRORS)
         self.assertEqual(flow_import.accepted_rows, 1)
         self.assertEqual(flow_import.rejected_rows, 1)
         self.assertEqual(Flow.objects.filter(sna_flow_id="ok-1").count(), 1)
+
+    def test_preview_and_confirm_import_technical_sna_csv(self):
+        csv_body = (
+            'id,"domainId","firstActiveTime","lastActiveTime","activeDuration",'
+            '"searchSubject.ipAddress","searchSubject.orientation","searchSubject.portProtocol.port","searchSubject.portProtocol.protocol",'
+            '"peer.ipAddress","peer.orientation","peer.portProtocol.port","peer.portProtocol.protocol",'
+            '"connection.transferBytes","connection.transferPackets","connection.transferByteRate","connection.transferPacketRate",'
+            '"connection.tcpConnections","connection.tcpRetransmissions","connection.application.name"\n'
+            '2246437167,"301","Wed Jul 08 22:44:40 UTC 2026","Wed Jul 08 22:44:41 UTC 2026","1000",'
+            '"10.10.30.40","server","5060","UDP",'
+            '"192.95.20.52","client","4040","UDP",'
+            '"1272","2","1272.0","2.0","0","-1","SIP (unclassified)"\n'
+        )
+
+        with self.settings(MEDIA_ROOT=TEST_MEDIA_ROOT):
+            preview = preview_flow_import_upload(self._csv_upload(csv_body), self.structure, self.user)
+            self.assertTrue(preview["is_valid"])
+            self.assertIn("id", preview["columns"]["recognized"])
+            flow_import = confirm_flow_import(FlowImport.objects.get(pk=preview["import_id"]))
+
+        self.assertEqual(flow_import.status, ImportStatus.COMPLETED)
+        flow = Flow.objects.get(sna_flow_id="2246437167")
+        self.assertEqual(flow.direction, FlowDirection.INBOUND)
+        self.assertEqual(flow.src_ip, "192.95.20.52")
+        self.assertEqual(flow.src_port, 4040)
+        self.assertEqual(flow.dst_ip, "10.10.30.40")
+        self.assertEqual(flow.dst_port, 5060)
+        self.assertEqual(flow.protocol, "UDP")
+        self.assertEqual(flow.application, "SIP (unclassified)")
+        self.assertEqual(flow.duration_seconds, 1)
+        self.assertEqual(flow.total_bytes, 1272)
+        self.assertEqual(flow.total_packets, 2)
+        self.assertIsNone(flow.tcp_retransmissions)
+
+    def test_one_structure_import_routes_rows_to_multiple_networks(self):
+        second_network = Network.objects.create(structure=self.structure, name="Réseau secondaire")
+        NetworkCIDR.objects.create(network=second_network, cidr="10.20.0.0/16")
+        csv_body = (
+            "Flow ID,Start,Subject IP Address,Subject Orientation,Subject Port/Protocol,"
+            "Peer IP Address,Peer Orientation,Peer Port/Protocol,protocol\n"
+            "multi-a,2026-07-08T10:00:00Z,10.10.1.20,Client,50000/TCP,198.51.100.1,Server,443/TCP,TCP\n"
+            "multi-b,2026-07-08T10:01:00Z,10.20.1.20,Client,50001/TCP,198.51.100.2,Server,443/TCP,TCP\n"
+        )
+
+        with self.settings(MEDIA_ROOT=TEST_MEDIA_ROOT):
+            preview = preview_flow_import_upload(self._csv_upload(csv_body), self.structure, self.user)
+            detected_ids = {item["network_id"] for item in preview["network_detection"]["networks"]}
+            self.assertEqual(detected_ids, {self.network.id, second_network.id})
+            flow_import = confirm_flow_import(FlowImport.objects.get(pk=preview["import_id"]))
+
+        self.assertEqual(flow_import.structure, self.structure)
+        self.assertEqual(flow_import.accepted_rows, 2)
+        self.assertEqual(Flow.objects.get(sna_flow_id="multi-a").network, self.network)
+        self.assertEqual(Flow.objects.get(sna_flow_id="multi-b").network, second_network)
+
+    def test_import_rejects_unmatched_and_cross_network_rows(self):
+        second_network = Network.objects.create(structure=self.structure, name="Réseau secondaire")
+        NetworkCIDR.objects.create(network=second_network, cidr="10.20.0.0/16")
+        csv_body = (
+            "Flow ID,Start,Subject IP Address,Subject Orientation,Subject Port/Protocol,"
+            "Peer IP Address,Peer Orientation,Peer Port/Protocol,protocol\n"
+            "outside,2026-07-08T10:00:00Z,198.51.100.1,Client,50000/TCP,203.0.113.1,Server,443/TCP,TCP\n"
+            "cross,2026-07-08T10:01:00Z,10.10.1.20,Client,50001/TCP,10.20.1.20,Server,443/TCP,TCP\n"
+        )
+
+        with self.settings(MEDIA_ROOT=TEST_MEDIA_ROOT):
+            preview = preview_flow_import_upload(self._csv_upload(csv_body), self.structure, self.user)
+            flow_import = confirm_flow_import(FlowImport.objects.get(pk=preview["import_id"]))
+
+        self.assertEqual(flow_import.status, ImportStatus.COMPLETED_WITH_ERRORS)
+        self.assertEqual(flow_import.accepted_rows, 0)
+        self.assertEqual(flow_import.rejected_rows, 2)
+
+    def test_most_specific_cidr_selects_the_network(self):
+        specific_network = Network.objects.create(structure=self.structure, name="Réseau spécifique")
+        NetworkCIDR.objects.create(network=specific_network, cidr="10.10.1.0/24")
+        csv_body = (
+            "Flow ID,Start,Subject IP Address,Subject Orientation,Subject Port/Protocol,"
+            "Peer IP Address,Peer Orientation,Peer Port/Protocol,protocol\n"
+            "specific,2026-07-08T10:00:00Z,10.10.1.20,Client,50000/TCP,198.51.100.1,Server,443/TCP,TCP\n"
+        )
+
+        with self.settings(MEDIA_ROOT=TEST_MEDIA_ROOT):
+            preview = preview_flow_import_upload(self._csv_upload(csv_body), self.structure, self.user)
+            flow_import = confirm_flow_import(FlowImport.objects.get(pk=preview["import_id"]))
+
+        self.assertEqual(flow_import.accepted_rows, 1)
+        self.assertEqual(Flow.objects.get(sna_flow_id="specific").network, specific_network)
 
 
 class FlowExplorationTests(TestCase):
@@ -696,7 +782,7 @@ class BulletinBusinessTests(TestCase):
 
         self.assertEqual(duplicates, [])
         self.assertIsNotNone(bulletin)
-        self.assertEqual(bulletin.network, network)
+        self.assertEqual(bulletin.structure, self.structure)
         self.assertEqual(bulletin.severity, BulletinSeverity.HIGH)
         self.assertEqual(bulletin.findings.count(), 1)
         finding = bulletin.findings.get()

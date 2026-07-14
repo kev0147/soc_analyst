@@ -1,5 +1,7 @@
 import csv
+import ipaddress
 import os
+from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 
@@ -8,15 +10,51 @@ from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 from django.utils import timezone
 
-from analyst.models import Flow, FlowImport, FlowImportItem, Network
+from analyst.models import Flow, FlowImport, FlowImportItem, Network, Structure
 from analyst.models.choices import ImportStatus
 
 from .csv_detector import MAX_UPLOAD_SIZE_BYTES, detect_csv
-from .flow_mapper import internal_cidrs_for_network, map_sna_row
+from .flow_mapper import endpoint_ips_for_row, map_sna_row
 from .sna_parser import iter_rows, read_header
 
 
 PREVIEW_ROWS = 20
+
+
+def _structure_cidr_index(structure: Structure) -> list[tuple[ipaddress.IPv4Network, Network]]:
+    entries = [
+        (ipaddress.ip_network(cidr.cidr, strict=False), cidr.network)
+        for network in structure.networks.filter(is_active=True).prefetch_related("cidrs")
+        for cidr in network.cidrs.all()
+    ]
+    entries.sort(key=lambda item: item[0].prefixlen, reverse=True)
+    return entries
+
+
+def _network_for_ip(ip_value: str, cidr_index: list[tuple[ipaddress.IPv4Network, Network]]) -> Network | None:
+    if not ip_value:
+        return None
+    address = ipaddress.ip_address(ip_value)
+    matches = [(cidr, network) for cidr, network in cidr_index if address in cidr]
+    if not matches:
+        return None
+    best_prefix = matches[0][0].prefixlen
+    best_networks = {network.id: network for cidr, network in matches if cidr.prefixlen == best_prefix}
+    if len(best_networks) > 1:
+        raise ValueError(f"L'IP {ip_value} correspond à plusieurs réseaux avec le même préfixe CIDR.")
+    return next(iter(best_networks.values()))
+
+
+def _network_for_row(row: dict[str, str], cidr_index: list[tuple[ipaddress.IPv4Network, Network]]) -> Network:
+    subject_ip, peer_ip = endpoint_ips_for_row(row)
+    subject_network = _network_for_ip(subject_ip, cidr_index)
+    peer_network = _network_for_ip(peer_ip, cidr_index)
+    if subject_network and peer_network and subject_network.id != peer_network.id:
+        raise ValueError("Les deux IP internes appartiennent à des réseaux différents de la structure.")
+    network = subject_network or peer_network
+    if network is None:
+        raise ValueError("Aucune IP ne correspond aux CIDR internes de la structure.")
+    return network
 
 
 def _import_storage_dir() -> Path:
@@ -63,13 +101,13 @@ def _preview_rows(path: Path, encoding: str, delimiter: str) -> list[dict]:
 
 
 @transaction.atomic
-def preview_flow_import_upload(uploaded_file: UploadedFile, network: Network, user) -> dict:
+def preview_flow_import_upload(uploaded_file: UploadedFile, structure: Structure, user) -> dict:
     stored_path = _store_upload(uploaded_file)
     detection = detect_csv(stored_path)
     header_report = read_header(stored_path, detection.encoding, detection.delimiter)
 
     flow_import = FlowImport.objects.create(
-        network=network,
+        structure=structure,
         uploaded_by=user,
         status=ImportStatus.PENDING if header_report.is_valid else ImportStatus.FAILED,
         original_filename=uploaded_file.name,
@@ -81,8 +119,30 @@ def preview_flow_import_upload(uploaded_file: UploadedFile, network: Network, us
         error_message="" if header_report.is_valid else "Colonnes obligatoires manquantes.",
     )
 
+    preview_rows = _preview_rows(stored_path, detection.encoding, detection.delimiter) if header_report.is_valid else []
+    cidr_index = _structure_cidr_index(structure)
+    if header_report.is_valid and not cidr_index:
+        flow_import.status = ImportStatus.FAILED
+        flow_import.error_message = "La structure ne possède aucun CIDR sur un réseau actif."
+        flow_import.save(update_fields=("status", "error_message"))
+        raise ValueError(flow_import.error_message)
+
+    detected_networks = Counter()
+    sample_rejections = []
+    for preview_row in preview_rows:
+        try:
+            network = _network_for_row(preview_row["data"], cidr_index)
+            detected_networks[network.id] += 1
+        except (ValueError, TypeError) as exc:
+            sample_rejections.append({"row_number": preview_row["row_number"], "reason": str(exc)})
+
+    network_names = {
+        network.id: network.name
+        for network in structure.networks.filter(id__in=detected_networks.keys())
+    }
     return {
         "import_id": flow_import.id,
+        "structure": {"id": structure.id, "code": structure.code, "name": structure.name},
         "is_valid": header_report.is_valid,
         "file": {
             "name": flow_import.original_filename,
@@ -92,7 +152,14 @@ def preview_flow_import_upload(uploaded_file: UploadedFile, network: Network, us
             "delimiter": detection.delimiter,
         },
         "columns": asdict(header_report),
-        "preview_rows": _preview_rows(stored_path, detection.encoding, detection.delimiter) if header_report.is_valid else [],
+        "preview_rows": preview_rows,
+        "network_detection": {
+            "networks": [
+                {"network_id": network_id, "name": network_names[network_id], "sample_rows": count}
+                for network_id, count in detected_networks.items()
+            ],
+            "sample_rejections": sample_rejections,
+        },
         "errors": [] if header_report.is_valid else [{"message": "Colonnes obligatoires manquantes.", "columns": header_report.missing_required}],
     }
 
@@ -132,7 +199,10 @@ def confirm_flow_import(flow_import: FlowImport) -> FlowImport:
         flow_import.save(update_fields=("status", "error_message", "completed_at"))
         return flow_import
 
-    internal_cidrs = internal_cidrs_for_network(flow_import.network)
+    cidr_index = _structure_cidr_index(flow_import.structure)
+    if not cidr_index:
+        raise ValueError("La structure ne possède aucun CIDR sur un réseau actif.")
+    internal_cidrs = tuple(cidr for cidr, _network in cidr_index)
     total_rows = accepted_rows = inserted_flows = reused_flows = 0
     period_start = period_end = None
     rejected: list[dict] = []
@@ -140,12 +210,13 @@ def confirm_flow_import(flow_import: FlowImport) -> FlowImport:
     for row_number, row in iter_rows(path, detection.encoding, detection.delimiter):
         total_rows += 1
         try:
-            flow_data = map_sna_row(row, flow_import.network, internal_cidrs=internal_cidrs)
+            network = _network_for_row(row, cidr_index)
+            flow_data = map_sna_row(row, network, internal_cidrs=internal_cidrs)
             if not flow_data["sna_flow_id"]:
                 raise ValueError("Flow ID manquant.")
             defaults = {key: value for key, value in flow_data.items() if key not in {"network", "sna_flow_id"}}
             flow, created = Flow.objects.update_or_create(
-                network=flow_import.network,
+                network=network,
                 sna_flow_id=flow_data["sna_flow_id"],
                 defaults=defaults,
             )
@@ -164,9 +235,9 @@ def confirm_flow_import(flow_import: FlowImport) -> FlowImport:
             rejected.append({
                 "row_number": row_number,
                 "reason": str(exc),
-                "flow_id": row.get("Flow ID", ""),
-                "subject_ip": row.get("Subject IP Address", ""),
-                "peer_ip": row.get("Peer IP Address", ""),
+                "flow_id": row.get("Flow ID") or row.get("id", ""),
+                "subject_ip": row.get("Subject IP Address") or row.get("searchSubject.ipAddress", ""),
+                "peer_ip": row.get("Peer IP Address") or row.get("peer.ipAddress", ""),
             })
 
     rejection_path = _write_rejections(flow_import, rejected)

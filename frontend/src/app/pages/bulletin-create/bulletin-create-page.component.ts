@@ -3,7 +3,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
-import { Network, PeerObservation, RiskProfile } from '../../core/api/api.types';
+import { Network, PeerObservation, RiskProfile, Structure } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
 
 @Component({
@@ -24,15 +24,10 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
         <h2>Informations bulletin</h2>
         <div class="grid cols-3">
           <label class="field">
-            <span>ID structure</span>
-            <input class="input" type="number" [(ngModel)]="structureId" />
-          </label>
-          <label class="field">
-            <span>Réseau</span>
-            <select class="select" [(ngModel)]="networkId">
-              <option [ngValue]="null">Auto / multi-réseaux</option>
-              @for (network of networks(); track network.id) {
-                <option [ngValue]="network.id">#{{ network.id }} — {{ network.name }}</option>
+            <span>Structure</span>
+            <select class="select" [(ngModel)]="structureId">
+              @for (structure of structures(); track structure.id) {
+                <option [ngValue]="structure.id">{{ structure.code }} — {{ structure.name }}</option>
               }
             </select>
           </label>
@@ -148,6 +143,7 @@ export class BulletinCreatePageComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   readonly networks = signal<Network[]>([]);
+  readonly structures = signal<Structure[]>([]);
   readonly observations = signal<PeerObservation[]>([]);
   readonly riskProfiles = signal<RiskProfile[]>([]);
   readonly selectedObservationIds = signal<number[]>([]);
@@ -156,8 +152,7 @@ export class BulletinCreatePageComponent implements OnInit {
   readonly bytes = formatBytes;
   readonly duration = formatDuration;
 
-  structureId = 1;
-  networkId: number | null = null;
+  structureId = 0;
   externalReference = '';
   severity = '';
   status = 'draft';
@@ -171,7 +166,11 @@ export class BulletinCreatePageComponent implements OnInit {
     }
     this.api.networks().subscribe((data) => {
       this.networks.set(data.results);
-      this.syncStructureFromNetwork();
+      this.syncStructureFromObservations();
+    });
+    this.api.structures({ is_active: true }).subscribe((data) => {
+      this.structures.set(data.results);
+      if (data.results.length && !this.structureId) this.structureId = data.results[0].id;
     });
     this.api.riskProfiles({ is_active: true }).subscribe((data) => this.riskProfiles.set(data.results));
     this.loadObservations();
@@ -180,7 +179,7 @@ export class BulletinCreatePageComponent implements OnInit {
   loadObservations() {
     this.api.peerObservationSuggestions({ peer_ip: this.observationSearch, limit: 50 }).subscribe((data) => {
       this.observations.set(data.results);
-      this.syncStructureFromNetwork();
+      this.syncStructureFromObservations();
     });
   }
 
@@ -188,10 +187,7 @@ export class BulletinCreatePageComponent implements OnInit {
     const selected = new Set(this.selectedObservationIds());
     selected.has(item.id) ? selected.delete(item.id) : selected.add(item.id);
     this.selectedObservationIds.set([...selected]);
-    if (!this.networkId) {
-      this.networkId = item.network;
-      this.syncStructureFromNetwork();
-    }
+    this.syncStructureFromNetworkId(item.network);
   }
 
   toggleRisk(id: number) {
@@ -207,7 +203,6 @@ export class BulletinCreatePageComponent implements OnInit {
   create() {
     const payload: Record<string, unknown> = {
       structure_id: this.structureId,
-      network_id: this.networkId,
       external_reference: this.externalReference,
       status: this.status,
       peer_observation_ids: this.selectedObservationIds(),
@@ -229,11 +224,16 @@ export class BulletinCreatePageComponent implements OnInit {
     });
   }
 
-  private syncStructureFromNetwork() {
-    if (!this.networkId) return;
-    const network = this.networks().find((item) => item.id === this.networkId);
+  private syncStructureFromNetworkId(networkId: number) {
+    const network = this.networks().find((item) => item.id === networkId);
     if (network) {
       this.structureId = network.structure;
     }
+  }
+
+  private syncStructureFromObservations() {
+    const selectedId = this.selectedObservationIds()[0];
+    const observation = this.observations().find((item) => item.id === selectedId);
+    if (observation) this.syncStructureFromNetworkId(observation.network);
   }
 }

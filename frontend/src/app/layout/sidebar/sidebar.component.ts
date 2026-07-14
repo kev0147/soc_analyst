@@ -7,18 +7,9 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
   imports: [RouterLink, RouterLinkActive],
   template: `
     <aside class="sidebar">
-      <div class="brand">
-        <div class="mark">D</div>
-        <div>
-          <strong>SOC Analyst</strong>
-          <span>Flow investigation</span>
-        </div>
-      </div>
-
       <nav>
         @for (item of items; track item.path) {
           <a [routerLink]="item.path" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }">
-            <span>{{ item.icon }}</span>
             {{ item.label }}
           </a>
         }
@@ -35,31 +26,6 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
       background: rgba(7, 16, 24, 0.86);
       backdrop-filter: blur(16px);
     }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 28px;
-    }
-    .mark {
-      width: 42px;
-      height: 42px;
-      display: grid;
-      place-items: center;
-      border-radius: 14px;
-      background: var(--brand);
-      color: #211600;
-      font-weight: 900;
-    }
-    .brand strong,
-    .brand span {
-      display: block;
-    }
-    .brand span {
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 2px;
-    }
     nav {
       display: grid;
       gap: 8px;
@@ -67,7 +33,6 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
     a {
       display: flex;
       align-items: center;
-      gap: 10px;
       color: var(--muted);
       padding: 11px 12px;
       border-radius: 12px;
@@ -94,12 +59,12 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 })
 export class SidebarComponent {
   readonly items = [
-    { path: '/dashboard', label: 'Dashboard', icon: '📊', exact: true },
-    { path: '/imports', label: 'Imports CSV', icon: '⬆️', exact: true },
-    { path: '/flows', label: 'Flows', icon: '🔎', exact: true },
-    { path: '/ip-analysis', label: 'Analyse IP', icon: '🧪', exact: true },
-    { path: '/soc-peers', label: 'SOC peers', icon: '🎯', exact: true },
-    { path: '/bulletins', label: 'Bulletins', icon: '📣', exact: true },
-    { path: '/bulletins/new', label: 'Ajouter bulletin', icon: '➕', exact: true },
+    { path: '/dashboard', label: 'Dashboard', exact: true },
+    { path: '/imports', label: 'Imports CSV', exact: true },
+    { path: '/flows', label: 'Flows', exact: true },
+    { path: '/ip-analysis', label: 'Analyse IP', exact: true },
+    { path: '/soc-peers', label: 'Peers', exact: true },
+    { path: '/bulletins', label: 'Bulletins', exact: true },
+    { path: '/bulletins/new', label: 'Ajouter un bulletin', exact: true },
   ];
 }

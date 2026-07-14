@@ -1,11 +1,13 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
-import { DashboardOverview } from '../../core/api/api.types';
+import { DashboardOverview, Structure } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
 
 @Component({
   selector: 'app-dashboard-page',
   standalone: true,
+  imports: [FormsModule],
   template: `
     <div class="page">
       <div class="page-title">
@@ -13,7 +15,18 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
           <h1>Dashboard</h1>
           <p>Vue d’ensemble des communications, volumes, imports et bulletins.</p>
         </div>
-        <button class="btn secondary" (click)="load()">Rafraîchir</button>
+        <div class="toolbar">
+          <label class="field">
+            <span>Structure</span>
+            <select class="select" [(ngModel)]="structureId" (ngModelChange)="load()">
+              <option [ngValue]="null">Toutes les structures</option>
+              @for (structure of structures(); track structure.id) {
+                <option [ngValue]="structure.id">{{ structure.code }} — {{ structure.name }}</option>
+              }
+            </select>
+          </label>
+          <button class="btn secondary" (click)="load()">Rafraîchir</button>
+        </div>
       </div>
 
       @if (dashboard(); as data) {
@@ -147,14 +160,17 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
 export class DashboardPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   readonly dashboard = signal<DashboardOverview | null>(null);
+  readonly structures = signal<Structure[]>([]);
   readonly bytes = formatBytes;
   readonly duration = formatDuration;
+  structureId: number | null = null;
 
   ngOnInit() {
+    this.api.structures({ is_active: true }).subscribe((data) => this.structures.set(data.results));
     this.load();
   }
 
   load() {
-    this.api.dashboard({ limit: 10 }).subscribe((data) => this.dashboard.set(data));
+    this.api.dashboard({ limit: 10, structure_id: this.structureId }).subscribe((data) => this.dashboard.set(data));
   }
 }

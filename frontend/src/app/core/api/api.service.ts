@@ -12,6 +12,7 @@ import {
   PaginatedResponse,
   PeerObservation,
   RiskProfile,
+  Structure,
   TopPeer,
   User,
 } from './api.types';
@@ -47,9 +48,13 @@ export class ApiService {
     return this.http.get<PaginatedResponse<Network>>(`${this.baseUrl}/networks/`, { params: this.params(params) });
   }
 
-  previewImport(networkId: number, file: File): Observable<unknown> {
+  structures(params: QueryParams = {}): Observable<PaginatedResponse<Structure>> {
+    return this.http.get<PaginatedResponse<Structure>>(`${this.baseUrl}/structures/`, { params: this.params(params) });
+  }
+
+  previewImport(structureId: number, file: File): Observable<unknown> {
     const form = new FormData();
-    form.append('network_id', String(networkId));
+    form.append('structure_id', String(structureId));
     form.append('file', file);
     return this.http.post(`${this.baseUrl}/flow-imports/preview/`, form);
   }

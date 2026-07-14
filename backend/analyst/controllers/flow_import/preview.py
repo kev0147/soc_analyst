@@ -5,12 +5,12 @@ from rest_framework.views import APIView
 
 from analyst.controllers.audit import record_audit
 from analyst.controllers.permissions import IsAdminOrAnalyst
-from analyst.models import Network
+from analyst.models import Structure
 from analyst.services.imports import preview_flow_import_upload
 
 
 class FlowImportPreviewInputSerializer(serializers.Serializer):
-    network_id = serializers.IntegerField()
+    structure_id = serializers.IntegerField()
     file = serializers.FileField()
 
 
@@ -20,11 +20,11 @@ class FlowImportPreviewController(APIView):
     def post(self, request):
         serializer = FlowImportPreviewInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        network = get_object_or_404(Network, pk=serializer.validated_data["network_id"])
+        structure = get_object_or_404(Structure, pk=serializer.validated_data["structure_id"], is_active=True)
         try:
             result = preview_flow_import_upload(
                 uploaded_file=serializer.validated_data["file"],
-                network=network,
+                structure=structure,
                 user=request.user,
             )
         except ValueError as exc:
@@ -34,7 +34,7 @@ class FlowImportPreviewController(APIView):
             "FLOW_IMPORT_PREVIEWED",
             details={
                 "import_id": result["import_id"],
-                "network_id": network.id,
+                "structure_id": structure.id,
                 "is_valid": result["is_valid"],
             },
         )
