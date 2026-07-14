@@ -13,13 +13,18 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=50)
         parser.add_argument(
             "--tools",
-            default="abuseipdb,virustotal,shodan",
-            help="Liste séparée par virgule : abuseipdb,virustotal,shodan",
+            default="abuseipdb,virustotal",
+            help="Liste séparée par virgule : abuseipdb,virustotal",
+        )
+        parser.add_argument(
+            "--force-refresh",
+            action="store_true",
+            help="Réanalyse également les résultats encore frais.",
         )
 
     def handle(self, *args, **options):
         tools = [item.strip() for item in options["tools"].split(",") if item.strip()]
-        invalid = sorted(set(tools) - set(ReputationSource.values))
+        invalid = sorted(set(tools) - {ReputationSource.ABUSEIPDB, ReputationSource.VIRUSTOTAL})
         if invalid:
             raise CommandError(f"Outils invalides : {', '.join(invalid)}")
 
@@ -29,6 +34,7 @@ class Command(BaseCommand):
                 import_id=options["import_id"],
                 tools=tools,
                 limit=options["limit"],
+                force_refresh=options["force_refresh"],
             )
         except Exception as exc:
             raise CommandError(str(exc)) from exc

@@ -1,5 +1,6 @@
 from pathlib import Path
 from io import StringIO
+from datetime import timedelta
 
 from django.core.management import call_command, CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -496,6 +497,15 @@ class BackgroundJobApiTests(TestCase):
         self.assertEqual(first.json()["job"]["id"], second.json()["job"]["id"])
         self.assertTrue(second.json()["already_queued"])
 
+    def test_ip_analysis_endpoint_rejects_shodan_as_reputation_source(self):
+        response = self.client.post(
+            "/api/v1/ip-analysis/run/",
+            {"scope": "all_flows", "tools": [ReputationSource.SHODAN], "limit": 10},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
 
 class FlowExplorationTests(TestCase):
     def setUp(self):
@@ -712,6 +722,60 @@ class IPReputationTests(TestCase):
         self.assertEqual(observation.total_duration_seconds, 900)
         self.assertEqual(observation.max_duration_seconds, 900)
         self.assertEqual(observation.avg_duration_seconds, 900)
+
+        second_run = run_reputation_analysis(
+            tools=[ReputationSource.ABUSEIPDB],
+            limit=10,
+            client_classes={ReputationSource.ABUSEIPDB: FakeAbuse},
+        )
+        self.assertEqual(second_run["candidate_count"], 0)
+        self.assertEqual(second_run["source_analysis_count"], 0)
+
+        forced_run = run_reputation_analysis(
+            tools=[ReputationSource.ABUSEIPDB],
+            limit=10,
+            client_classes={ReputationSource.ABUSEIPDB: FakeAbuse},
+            force_refresh=True,
+        )
+        self.assertEqual(forced_run["candidate_count"], 2)
+        self.assertEqual(forced_run["source_analysis_count"], 2)
+
+    def test_candidate_freshness_skips_fresh_results_and_prioritizes_expired_results(self):
+        fresh_reputation = IPReputation.objects.create(ip_address="203.0.113.50")
+        fresh_result = IPReputationResult.objects.create(
+            reputation=fresh_reputation,
+            source=ReputationSource.ABUSEIPDB,
+            status=ReputationStatus.SUCCESS,
+            verdict=ReputationVerdict.CLEAN,
+            score=0,
+            analyzed_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+        expired_reputation = IPReputation.objects.create(ip_address="198.51.100.25")
+        expired_result = IPReputationResult.objects.create(
+            reputation=expired_reputation,
+            source=ReputationSource.ABUSEIPDB,
+            status=ReputationStatus.SUCCESS,
+            verdict=ReputationVerdict.SUSPICIOUS,
+            score=40,
+            analyzed_at=timezone.now() - timedelta(days=2),
+            expires_at=timezone.now() - timedelta(hours=1),
+        )
+
+        candidates = candidate_ips(tools=[ReputationSource.ABUSEIPDB], limit=10)
+
+        self.assertFalse(fresh_result.is_stale)
+        self.assertTrue(expired_result.is_stale)
+        self.assertEqual([item.ip_address for item in candidates], ["198.51.100.25"])
+        self.assertEqual(candidates[0].priority, "expired")
+        self.assertEqual(candidates[0].due_tools, (ReputationSource.ABUSEIPDB,))
+
+        forced = candidate_ips(
+            tools=[ReputationSource.ABUSEIPDB],
+            limit=10,
+            force_refresh=True,
+        )
+        self.assertEqual({item.ip_address for item in forced}, {"198.51.100.25", "203.0.113.50"})
 
     def test_sync_peer_observations_materializes_external_peer_to_internal_host(self):
         result = sync_peer_observations()

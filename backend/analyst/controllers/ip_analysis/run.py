@@ -13,11 +13,14 @@ class IPAnalysisRunInputSerializer(serializers.Serializer):
     scope = serializers.ChoiceField(choices=("all_flows", "import"), default="all_flows")
     import_id = serializers.IntegerField(required=False, allow_null=True)
     tools = serializers.ListField(
-        child=serializers.ChoiceField(choices=ReputationSource.choices),
+        child=serializers.ChoiceField(
+            choices=(ReputationSource.ABUSEIPDB, ReputationSource.VIRUSTOTAL)
+        ),
         required=False,
         allow_empty=False,
     )
     limit = serializers.IntegerField(required=False, min_value=1, max_value=500, default=50)
+    force_refresh = serializers.BooleanField(required=False, default=False)
 
 
 class IPAnalysisRunController(APIView):
@@ -37,6 +40,7 @@ class IPAnalysisRunController(APIView):
             "import_id": data.get("import_id"),
             "tools": data.get("tools"),
             "limit": data.get("limit") or 50,
+            "force_refresh": data.get("force_refresh", False),
         }
         job, created = enqueue_background_job(
             kind=BackgroundJobKind.IP_REPUTATION,

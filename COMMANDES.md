@@ -55,8 +55,10 @@ CSRF_TRUSTED_ORIGINS=http://localhost:4200,http://127.0.0.1:4200
 
 ABUSEIPDB_API_KEY=
 VIRUSTOTAL_API_KEY=
-SHODAN_API_KEY=
 IP_REPUTATION_TIMEOUT_SECONDS=20
+IP_REPUTATION_ABUSEIPDB_TTL_HOURS=24
+IP_REPUTATION_VIRUSTOTAL_TTL_HOURS=168
+IP_REPUTATION_ERROR_RETRY_HOURS=1
 BACKGROUND_JOBS_POLL_SECONDS=1
 ```
 
@@ -223,19 +225,25 @@ Le fonctionnement normal passe par l'interface et le worker. Ces commandes direc
 Analyser les IP externes de tous les flows :
 
 ```powershell
-.\.venv\Scripts\python.exe backend\manage.py run_ip_reputation --scope all_flows --limit 50 --tools abuseipdb,virustotal,shodan
+.\.venv\Scripts\python.exe backend\manage.py run_ip_reputation --scope all_flows --limit 50 --tools abuseipdb,virustotal
 ```
 
 Analyser les IP d'un import précis :
 
 ```powershell
-.\.venv\Scripts\python.exe backend\manage.py run_ip_reputation --scope import --import-id 12 --limit 50 --tools abuseipdb,virustotal,shodan
+.\.venv\Scripts\python.exe backend\manage.py run_ip_reputation --scope import --import-id 12 --limit 50 --tools abuseipdb,virustotal
 ```
 
 Utiliser une seule plateforme :
 
 ```powershell
 .\.venv\Scripts\python.exe backend\manage.py run_ip_reputation --scope all_flows --limit 50 --tools abuseipdb
+```
+
+Forcer exceptionnellement l'actualisation des résultats encore frais :
+
+```powershell
+.\.venv\Scripts\python.exe backend\manage.py run_ip_reputation --scope all_flows --limit 50 --tools abuseipdb,virustotal --force-refresh
 ```
 
 ## 8. Reprise de données historiques

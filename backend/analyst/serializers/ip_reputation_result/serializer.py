@@ -4,6 +4,9 @@ from analyst.models import IPReputationResult
 
 
 class IPReputationResultSerializer(serializers.ModelSerializer):
+    is_stale = serializers.BooleanField(read_only=True)
+    freshness_status = serializers.CharField(read_only=True)
+
     class Meta:
         model = IPReputationResult
         fields = "__all__"

@@ -13,7 +13,7 @@ import { IpAnalysisRecord } from '../../core/api/api.types';
       <div class="page-title">
         <div>
           <h1>Analyse IP</h1>
-          <p>AbuseIPDB, VirusTotal et Shodan — priorité aux IP jamais analysées.</p>
+          <p>Réputation AbuseIPDB et VirusTotal — priorité aux résultats absents ou expirés.</p>
         </div>
       </div>
 
@@ -37,7 +37,7 @@ import { IpAnalysisRecord } from '../../core/api/api.types';
             <div class="toolbar">
               <label><input type="checkbox" [(ngModel)]="tools.abuseipdb" /> AbuseIPDB</label>
               <label><input type="checkbox" [(ngModel)]="tools.virustotal" /> VirusTotal</label>
-              <label><input type="checkbox" [(ngModel)]="tools.shodan" /> Shodan</label>
+              <label><input type="checkbox" [(ngModel)]="forceRefresh" /> Forcer l'actualisation des résultats encore frais</label>
             </div>
             <button class="btn" (click)="run()">Lancer</button>
             @if (message()) {
@@ -50,11 +50,11 @@ import { IpAnalysisRecord } from '../../core/api/api.types';
           <h2>Priorité d’analyse</h2>
           <ol class="muted">
             <li>IP jamais analysées</li>
-            <li>IP analysées par 1 plateforme</li>
-            <li>IP analysées par 2 plateformes</li>
-            <li>IP déjà analysées par les 3 plateformes</li>
+            <li>Plateforme manquante pour une IP partiellement analysée</li>
+            <li>Résultats arrivés à expiration</li>
+            <li>Résultats encore frais uniquement si l'actualisation est forcée</li>
           </ol>
-          <p class="muted">Ce tri sera exécuté côté backend réputation IP.</p>
+          <p class="muted">Par défaut, aucune requête API n'est répétée pour un résultat encore frais.</p>
         </article>
       </section>
 
@@ -82,7 +82,7 @@ import { IpAnalysisRecord } from '../../core/api/api.types';
                 <th>Flows</th>
                 <th>AbuseIPDB</th>
                 <th>VirusTotal</th>
-                <th>Shodan</th>
+                <th>Fraîcheur</th>
                 <th>Dernière analyse</th>
               </tr>
             </thead>
@@ -104,7 +104,7 @@ import { IpAnalysisRecord } from '../../core/api/api.types';
                   <td>{{ record.flow_count }}</td>
                   <td>{{ sourceLabel(record, 'abuseipdb') }}</td>
                   <td>{{ sourceLabel(record, 'virustotal') }}</td>
-                  <td>{{ sourceLabel(record, 'shodan') }}</td>
+                  <td>{{ record.freshness_status }}</td>
                   <td>{{ record.last_analyzed_at ? (record.last_analyzed_at | date:'medium') : '-' }}</td>
                 </tr>
               } @empty {
@@ -132,8 +132,8 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
   tools = {
     abuseipdb: true,
     virustotal: true,
-    shodan: true,
   };
+  forceRefresh = false;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit() {
@@ -144,7 +144,12 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
     const selectedTools = Object.entries(this.tools)
       .filter(([, enabled]) => enabled)
       .map(([name]) => name);
-    this.api.launchIpAnalysis({ scope: this.scope, import_id: this.importId ?? undefined, tools: selectedTools }).subscribe({
+    this.api.launchIpAnalysis({
+      scope: this.scope,
+      import_id: this.importId ?? undefined,
+      tools: selectedTools,
+      force_refresh: this.forceRefresh,
+    }).subscribe({
       next: (response) => {
         this.message.set(response.already_queued ? 'Cette analyse est déjà en file.' : 'Analyse ajoutée à la file.');
         this.poll(response.job.id);
@@ -182,12 +187,14 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
     });
   }
 
-  sourceLabel(record: IpAnalysisRecord, source: 'abuseipdb' | 'virustotal' | 'shodan'): string {
+  sourceLabel(record: IpAnalysisRecord, source: 'abuseipdb' | 'virustotal'): string {
     const item = record.results.find((result) => result.source === source);
     if (!item) {
       return '-';
     }
+    if (item.freshness_status === 'never_analyzed') return 'Jamais analysé';
     const score = item.score === null || item.score === undefined ? '-' : item.score;
-    return `${item.verdict} (${score})`;
+    const freshness = item.is_stale ? 'expiré' : 'frais';
+    return `${item.verdict} (${score}) — ${freshness}`;
   }
 }

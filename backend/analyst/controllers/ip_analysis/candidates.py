@@ -18,6 +18,8 @@ class IPAnalysisCandidatesController(APIView):
                 scope=request.query_params.get("scope", "all_flows"),
                 import_id=int(request.query_params["import_id"]) if request.query_params.get("import_id") else None,
                 limit=limit,
+                tools=request.query_params.getlist("tools") or None,
+                force_refresh=request.query_params.get("force_refresh", "").lower() in {"1", "true", "yes"},
             )
         except (ValueError, TypeError) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -31,6 +33,11 @@ class IPAnalysisCandidatesController(APIView):
                         "first_seen_at": item.first_seen_at,
                         "last_seen_at": item.last_seen_at,
                         "analyzed_source_count": item.analyzed_source_count,
+                        "priority": item.priority,
+                        "missing_tools": item.missing_tools,
+                        "expired_tools": item.expired_tools,
+                        "fresh_tools": item.fresh_tools,
+                        "due_tools": item.due_tools,
                     }
                     for item in candidates
                 ]

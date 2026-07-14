@@ -1,6 +1,6 @@
 from django.db import models
 
-from .choices import BulletinSeverity, ReputationVerdict
+from .choices import BulletinSeverity, ReputationSource, ReputationVerdict
 
 
 class BulletinFinding(models.Model):
@@ -109,8 +109,12 @@ class BulletinFinding(models.Model):
                 "score": result.score,
                 "country": result.country,
                 "analyzed_at": result.analyzed_at.isoformat(),
+                "expires_at": result.expires_at.isoformat() if result.expires_at else None,
+                "freshness_status": result.freshness_status,
             }
-            for result in reputation.results.order_by("source")
+            for result in reputation.results.filter(
+                source__in=(ReputationSource.ABUSEIPDB, ReputationSource.VIRUSTOTAL)
+            ).order_by("source")
         ]
         self.risk_name_snapshot = self.risk_profile.name
         self.severity = self.severity or self.risk_profile.default_severity

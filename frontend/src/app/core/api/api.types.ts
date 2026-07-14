@@ -207,13 +207,18 @@ export interface IpAnalysisRecord {
   flow_count: number;
   last_seen_at?: string | null;
   last_analyzed_at?: string | null;
+  freshness_status: 'never_analyzed' | 'incomplete' | 'stale' | 'fresh';
+  next_refresh_at?: string | null;
   results: Array<{
-    source: 'abuseipdb' | 'virustotal' | 'shodan';
-    status: 'success' | 'skipped' | 'error';
+    source: 'abuseipdb' | 'virustotal';
+    status: 'success' | 'skipped' | 'error' | 'never_analyzed';
     verdict: string;
     score?: number | null;
     country?: string;
     error_message?: string;
     analyzed_at?: string;
+    expires_at?: string | null;
+    is_stale: boolean;
+    freshness_status: 'never_analyzed' | 'fresh' | 'stale' | 'error' | 'unavailable';
   }>;
 }

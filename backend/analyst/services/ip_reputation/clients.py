@@ -100,33 +100,7 @@ class VirusTotalClient:
             return _now_result(self.source, ReputationStatus.ERROR, ReputationVerdict.UNKNOWN, error_message=str(exc))
 
 
-class ShodanClient:
-    source = ReputationSource.SHODAN
-
-    def analyze(self, ip: str) -> ReputationClientResult:
-        key = settings.SHODAN_API_KEY
-        if not key:
-            return _now_result(self.source, ReputationStatus.SKIPPED, ReputationVerdict.UNKNOWN, error_message="SHODAN_API_KEY manquante.")
-        try:
-            query = urllib.parse.urlencode({"key": key})
-            raw = _get_json(f"https://api.shodan.io/shodan/host/{urllib.parse.quote(ip)}?{query}")
-            vuln_count = len(raw.get("vulns") or {})
-            tag_count = len(raw.get("tags") or [])
-            score = min(100, vuln_count * 15 + tag_count * 5)
-            return _now_result(
-                self.source,
-                ReputationStatus.SUCCESS,
-                verdict_from_score(score),
-                score=score,
-                country=(raw.get("country_code") or "").upper(),
-                raw=raw,
-            )
-        except Exception as exc:
-            return _now_result(self.source, ReputationStatus.ERROR, ReputationVerdict.UNKNOWN, error_message=str(exc))
-
-
 CLIENTS = {
     ReputationSource.ABUSEIPDB: AbuseIPDBClient,
     ReputationSource.VIRUSTOTAL: VirusTotalClient,
-    ReputationSource.SHODAN: ShodanClient,
 }

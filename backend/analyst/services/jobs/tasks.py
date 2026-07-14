@@ -84,6 +84,7 @@ def _run(job: BackgroundJob) -> dict:
             import_id=payload.get("import_id"),
             tools=payload.get("tools"),
             limit=payload.get("limit", 50),
+            force_refresh=payload.get("force_refresh", False),
             progress_callback=lambda current, total, message: _progress(str(job.id), current, total, message),
         )
 
