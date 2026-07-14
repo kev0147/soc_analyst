@@ -1,2 +1,17 @@
 
 frontend_backup/
+frontend/backend/
+.venv/
+
+# Secrets et configuration locale
+.env
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Données et fichiers générés localement
+*.sqlite3
+backend/media/
+backend/media_test/
