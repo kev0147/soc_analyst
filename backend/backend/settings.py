@@ -10,22 +10,40 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env", override=False)
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name, str(default))
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_list(name: str, default: str = "") -> list[str]:
+    value = os.getenv(name, default)
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-r)@btrq48&jvt^cig8c&j!4pltz+%me7e$s#-ywt6=p5c@k09!'
+DEBUG = env_bool("DJANGO_DEBUG", True)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-local-development-only"
+    else:
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY est obligatoire lorsque DJANGO_DEBUG=False.")
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
 
 # Application definition
@@ -108,7 +126,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'Europe/London'
+TIME_ZONE = os.getenv("DJANGO_TIME_ZONE", "Europe/London")
 
 USE_I18N = True
 
@@ -141,17 +159,21 @@ SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
 
-LOCAL_DEV_CORS_ORIGINS = {
-    'http://localhost:4200',
-    'http://127.0.0.1:4200',
-}
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:4200',
-    'http://127.0.0.1:4200',
-]
+LOCAL_DEV_CORS_ORIGINS = set(
+    env_list(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:4200,http://127.0.0.1:4200",
+    )
+)
+CSRF_TRUSTED_ORIGINS = env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    "http://localhost:4200,http://127.0.0.1:4200",
+)
 
-ABUSEIPDB_API_KEY = ''
-VIRUSTOTAL_API_KEY = ''
-SHODAN_API_KEY = ''
-IP_REPUTATION_TIMEOUT_SECONDS = 20
+ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY", "")
+VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
+SHODAN_API_KEY = os.getenv("SHODAN_API_KEY", "")
+IP_REPUTATION_TIMEOUT_SECONDS = int(os.getenv("IP_REPUTATION_TIMEOUT_SECONDS", "20"))
