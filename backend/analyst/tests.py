@@ -16,6 +16,7 @@ from .models import (
     Flow,
     FlowImport,
     IPReputation,
+    IPReputationResult,
     Network,
     NetworkCIDR,
     PeerObservation,
@@ -325,7 +326,7 @@ class FlowImportServiceTests(TestCase):
         self.assertEqual(Flow.objects.get(sna_flow_id="multi-a").network, self.network)
         self.assertEqual(Flow.objects.get(sna_flow_id="multi-b").network, second_network)
 
-    def test_import_rejects_unmatched_and_cross_network_rows(self):
+    def test_import_keeps_cross_network_rows_and_rejects_only_unmatched_rows(self):
         second_network = Network.objects.create(structure=self.structure, name="Réseau secondaire")
         NetworkCIDR.objects.create(network=second_network, cidr="10.20.0.0/16")
         csv_body = (
@@ -340,8 +341,21 @@ class FlowImportServiceTests(TestCase):
             flow_import = confirm_flow_import(FlowImport.objects.get(pk=preview["import_id"]))
 
         self.assertEqual(flow_import.status, ImportStatus.COMPLETED_WITH_ERRORS)
-        self.assertEqual(flow_import.accepted_rows, 0)
-        self.assertEqual(flow_import.rejected_rows, 2)
+        self.assertEqual(flow_import.accepted_rows, 1)
+        self.assertEqual(flow_import.rejected_rows, 1)
+
+        cross_flow = Flow.objects.get(sna_flow_id="cross")
+        self.assertEqual(cross_flow.direction, FlowDirection.INTERNAL)
+        self.assertEqual(cross_flow.network, self.network)
+        self.assertEqual(cross_flow.src_network, self.network)
+        self.assertEqual(cross_flow.dst_network, second_network)
+        self.assertEqual(
+            list(apply_flow_filters(Flow.objects.all(), {"network_id": str(second_network.id)})),
+            [cross_flow],
+        )
+
+        observation_sync = sync_peer_observations(scope="import", import_id=flow_import.id)
+        self.assertEqual(observation_sync["observation_count"], 0)
 
     def test_most_specific_cidr_selects_the_network(self):
         specific_network = Network.objects.create(structure=self.structure, name="Réseau spécifique")
@@ -753,6 +767,15 @@ class BulletinBusinessTests(TestCase):
             score=95,
             country="GH",
         )
+        reputation_result = IPReputationResult.objects.create(
+            reputation=reputation,
+            source=ReputationSource.ABUSEIPDB,
+            status=ReputationStatus.SUCCESS,
+            verdict=ReputationVerdict.MALICIOUS,
+            score=95,
+            country="GH",
+            analyzed_at=timezone.now(),
+        )
         observation = PeerObservation.objects.create(
             peer_reputation=reputation,
             network=network,
@@ -790,6 +813,45 @@ class BulletinBusinessTests(TestCase):
         self.assertEqual(finding.risk_profile, risk_profile)
         self.assertEqual(finding.impact_snapshot, risk_profile.impact)
         self.assertEqual(finding.recommendation_snapshot, risk_profile.recommendation)
+        self.assertEqual(finding.peer_ip_snapshot, "198.51.100.99")
+        self.assertEqual(finding.peer_country_snapshot, "GH")
+        self.assertEqual(finding.host_ip_snapshot, "10.20.30.40")
+        self.assertEqual(finding.host_port_snapshot, 22)
+        self.assertEqual(finding.flow_count_snapshot, 8)
+        self.assertEqual(finding.total_bytes_snapshot, 500_000)
+        self.assertEqual(finding.reputation_verdict_snapshot, ReputationVerdict.MALICIOUS)
+        self.assertEqual(finding.reputation_score_snapshot, 95)
+        self.assertEqual(finding.reputation_results_snapshot[0]["source"], ReputationSource.ABUSEIPDB)
+        self.assertEqual(
+            finding.reputation_results_snapshot[0]["analyzed_at"],
+            reputation_result.analyzed_at.isoformat(),
+        )
+
+        reputation.country = "FR"
+        reputation.verdict = ReputationVerdict.CLEAN
+        reputation.score = 0
+        reputation.save()
+        observation.host_port = 443
+        observation.flow_count = 99
+        observation.total_bytes = 9_000_000
+        observation.save()
+        risk_profile.name = "Risque renommé"
+        risk_profile.impact = "Impact modifié"
+        risk_profile.recommendation = "Recommandation modifiée"
+        risk_profile.save()
+        finding.refresh_from_db()
+
+        self.assertEqual(finding.peer_country_snapshot, "GH")
+        self.assertEqual(finding.host_port_snapshot, 22)
+        self.assertEqual(finding.flow_count_snapshot, 8)
+        self.assertEqual(finding.total_bytes_snapshot, 500_000)
+        self.assertEqual(finding.reputation_verdict_snapshot, ReputationVerdict.MALICIOUS)
+        self.assertEqual(finding.risk_name_snapshot, "Accès SSH prolongé depuis une IP malveillante")
+        self.assertEqual(finding.impact_snapshot, "Risque d'accès distant non autorisé ou de tunnel.")
+        self.assertEqual(
+            finding.recommendation_snapshot,
+            "Vérifier les journaux SSH et restreindre l'accès à la source.",
+        )
 
         duplicate, duplicate_rows = create_bulletin_from_findings(
             {

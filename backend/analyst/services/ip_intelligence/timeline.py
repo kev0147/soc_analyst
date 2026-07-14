@@ -104,11 +104,11 @@ def _bulletin_summary(bulletin: Bulletin, ip_link: BulletinIP | None = None, fin
         "risks": [link.risk.name for link in bulletin.risk_links.all()],
         "findings": [
             {
-                "peer_ip": item.peer_observation.peer_ip,
-                "host_ip": item.peer_observation.host_ip,
-                "host_port": item.peer_observation.host_port,
-                "host_service": item.peer_observation.host_service,
-                "risk_name": item.risk_profile.name,
+                "peer_ip": item.peer_ip_snapshot,
+                "host_ip": item.host_ip_snapshot,
+                "host_port": item.host_port_snapshot,
+                "host_service": item.host_service_snapshot,
+                "risk_name": item.risk_name_snapshot,
                 "severity": item.severity,
             }
             for item in bulletin.findings.all()
@@ -205,7 +205,9 @@ def build_ip_timeline(ip: str, params) -> dict:
     if structure_id is not None:
         flows = flows.filter(network__structure_id=structure_id)
     if network_id is not None:
-        flows = flows.filter(network_id=network_id)
+        flows = flows.filter(
+            Q(network_id=network_id) | Q(src_network_id=network_id) | Q(dst_network_id=network_id)
+        )
     if started_from is not None:
         flows = flows.filter(started_at__gte=started_from)
     if started_to is not None:
@@ -228,11 +230,8 @@ def build_ip_timeline(ip: str, params) -> dict:
     bulletin_findings = BulletinFinding.objects.select_related(
         "bulletin",
         "bulletin__structure",
-        "peer_observation",
-        "peer_observation__peer_reputation",
-        "risk_profile",
     ).filter(
-        Q(peer_observation__peer_reputation__ip_address=ip) | Q(peer_observation__host_ip=ip),
+        Q(peer_ip_snapshot=ip) | Q(host_ip_snapshot=ip),
         bulletin__deleted_at__isnull=True,
     )
     if structure_id is not None:
@@ -242,9 +241,6 @@ def build_ip_timeline(ip: str, params) -> dict:
             "bulletin__risk_links__risk",
             "bulletin__type_links__bulletin_type",
             "bulletin__findings",
-            "bulletin__findings__peer_observation",
-            "bulletin__findings__peer_observation__peer_reputation",
-            "bulletin__findings__risk_profile",
         ).order_by("-bulletin__reference_year", "-bulletin__sequence_number")[:limit]
     )
 

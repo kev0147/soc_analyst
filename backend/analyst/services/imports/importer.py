@@ -2,7 +2,7 @@ import csv
 import ipaddress
 import os
 from collections import Counter
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from django.conf import settings
@@ -45,16 +45,33 @@ def _network_for_ip(ip_value: str, cidr_index: list[tuple[ipaddress.IPv4Network,
     return next(iter(best_networks.values()))
 
 
-def _network_for_row(row: dict[str, str], cidr_index: list[tuple[ipaddress.IPv4Network, Network]]) -> Network:
+@dataclass(frozen=True)
+class RowNetworkMapping:
+    primary_network: Network
+    subject_network: Network | None
+    peer_network: Network | None
+
+    @property
+    def matched_networks(self) -> tuple[Network, ...]:
+        networks = {network.id: network for network in (self.subject_network, self.peer_network) if network}
+        return tuple(networks.values())
+
+
+def _network_mapping_for_row(
+    row: dict[str, str],
+    cidr_index: list[tuple[ipaddress.IPv4Network, Network]],
+) -> RowNetworkMapping:
     subject_ip, peer_ip = endpoint_ips_for_row(row)
     subject_network = _network_for_ip(subject_ip, cidr_index)
     peer_network = _network_for_ip(peer_ip, cidr_index)
-    if subject_network and peer_network and subject_network.id != peer_network.id:
-        raise ValueError("Les deux IP internes appartiennent à des réseaux différents de la structure.")
     network = subject_network or peer_network
     if network is None:
         raise ValueError("Aucune IP ne correspond aux CIDR internes de la structure.")
-    return network
+    return RowNetworkMapping(
+        primary_network=network,
+        subject_network=subject_network,
+        peer_network=peer_network,
+    )
 
 
 def _import_storage_dir() -> Path:
@@ -131,8 +148,9 @@ def preview_flow_import_upload(uploaded_file: UploadedFile, structure: Structure
     sample_rejections = []
     for preview_row in preview_rows:
         try:
-            network = _network_for_row(preview_row["data"], cidr_index)
-            detected_networks[network.id] += 1
+            mapping = _network_mapping_for_row(preview_row["data"], cidr_index)
+            for network in mapping.matched_networks:
+                detected_networks[network.id] += 1
         except (ValueError, TypeError) as exc:
             sample_rejections.append({"row_number": preview_row["row_number"], "reason": str(exc)})
 
@@ -210,8 +228,11 @@ def confirm_flow_import(flow_import: FlowImport) -> FlowImport:
     for row_number, row in iter_rows(path, detection.encoding, detection.delimiter):
         total_rows += 1
         try:
-            network = _network_for_row(row, cidr_index)
+            mapping = _network_mapping_for_row(row, cidr_index)
+            network = mapping.primary_network
             flow_data = map_sna_row(row, network, internal_cidrs=internal_cidrs)
+            flow_data["src_network"] = _network_for_ip(flow_data["src_ip"], cidr_index)
+            flow_data["dst_network"] = _network_for_ip(flow_data["dst_ip"], cidr_index)
             if not flow_data["sna_flow_id"]:
                 raise ValueError("Flow ID manquant.")
             defaults = {key: value for key, value in flow_data.items() if key not in {"network", "sna_flow_id"}}

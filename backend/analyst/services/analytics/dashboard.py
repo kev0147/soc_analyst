@@ -30,7 +30,11 @@ def _imports(params):
         queryset = queryset.filter(structure_id=structure_id)
     network_id = int_param(params, "network_id")
     if network_id is not None:
-        queryset = queryset.filter(items__flow__network_id=network_id).distinct()
+        queryset = queryset.filter(
+            Q(items__flow__network_id=network_id)
+            | Q(items__flow__src_network_id=network_id)
+            | Q(items__flow__dst_network_id=network_id)
+        ).distinct()
     return queryset
 
 

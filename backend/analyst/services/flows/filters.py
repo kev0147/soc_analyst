@@ -82,7 +82,9 @@ def apply_flow_filters(queryset: QuerySet, params) -> QuerySet:
 
     network_id = _int_param(params, "network_id")
     if network_id is not None:
-        queryset = queryset.filter(network_id=network_id)
+        queryset = queryset.filter(
+            Q(network_id=network_id) | Q(src_network_id=network_id) | Q(dst_network_id=network_id)
+        )
 
     import_id = _int_param(params, "import_id")
     if import_id is not None:

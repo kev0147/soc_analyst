@@ -61,11 +61,11 @@ def finding_duplicate_summary(bulletin: Bulletin) -> dict:
         "findings": [
             {
                 "peer_observation_id": finding.peer_observation_id,
-                "peer_ip": finding.peer_observation.peer_ip,
-                "host_ip": finding.peer_observation.host_ip,
-                "host_port": finding.peer_observation.host_port,
+                "peer_ip": finding.peer_ip_snapshot,
+                "host_ip": finding.host_ip_snapshot,
+                "host_port": finding.host_port_snapshot,
                 "risk_profile_id": finding.risk_profile_id,
-                "risk_name": finding.risk_profile.name,
+                "risk_name": finding.risk_name_snapshot,
             }
             for finding in bulletin.findings.all()
         ],
@@ -90,9 +90,6 @@ def find_duplicate_bulletin_findings(
         .distinct()
         .prefetch_related(
             "findings",
-            "findings__peer_observation",
-            "findings__peer_observation__peer_reputation",
-            "findings__risk_profile",
         )
     )
     if exclude_bulletin_id:

@@ -5,9 +5,6 @@ from dataclasses import dataclass
 from django.db import transaction
 
 from analyst.models import Flow, FlowImport, IPReputation, PeerObservation
-from analyst.services.imports.flow_mapper import internal_cidrs_for_network
-
-
 PORT_CATEGORIES = {
     20: "Transfert de fichiers",
     21: "Transfert de fichiers",
@@ -47,7 +44,7 @@ class ObservationEndpoint:
 
 
 def _flow_queryset(scope: str = "all_flows", import_id: int | None = None):
-    queryset = Flow.objects.select_related("network").all()
+    queryset = Flow.objects.select_related("network", "network__structure").all()
     if scope == "import":
         if not import_id:
             raise ValueError("import_id est obligatoire pour scope=import.")
@@ -61,6 +58,14 @@ def _flow_queryset(scope: str = "all_flows", import_id: int | None = None):
 def _is_internal(ip: str, cidrs) -> bool:
     address = ipaddress.ip_address(ip)
     return any(address in cidr for cidr in cidrs)
+
+
+def _internal_cidrs_for_structure(structure) -> tuple[ipaddress.IPv4Network, ...]:
+    return tuple(
+        ipaddress.ip_network(cidr, strict=False)
+        for cidr in structure.networks.filter(is_active=True).values_list("cidrs__cidr", flat=True)
+        if cidr
+    )
 
 
 def _port_category(port: int | None, service: str = "") -> str:
@@ -117,9 +122,10 @@ def _collect_stats(flows):
     )
     cidr_cache = {}
     for flow in flows.iterator(chunk_size=1000):
-        if flow.network_id not in cidr_cache:
-            cidr_cache[flow.network_id] = internal_cidrs_for_network(flow.network)
-        endpoint = _observation_endpoint(flow, cidr_cache[flow.network_id])
+        structure_id = flow.network.structure_id
+        if structure_id not in cidr_cache:
+            cidr_cache[structure_id] = _internal_cidrs_for_structure(flow.network.structure)
+        endpoint = _observation_endpoint(flow, cidr_cache[structure_id])
         if endpoint is None:
             continue
         key = (

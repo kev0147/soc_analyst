@@ -7,6 +7,20 @@ from .choices import EndpointRole, FlowDirection, MappingMethod
 
 class Flow(models.Model):
     network = models.ForeignKey("analyst.Network", on_delete=models.CASCADE, related_name="flows")
+    src_network = models.ForeignKey(
+        "analyst.Network",
+        on_delete=models.PROTECT,
+        related_name="flows_as_source_network",
+        null=True,
+        blank=True,
+    )
+    dst_network = models.ForeignKey(
+        "analyst.Network",
+        on_delete=models.PROTECT,
+        related_name="flows_as_destination_network",
+        null=True,
+        blank=True,
+    )
     sna_flow_id = models.CharField(max_length=128)
     domain = models.CharField(max_length=255, blank=True)
     started_at = models.DateTimeField()
@@ -59,6 +73,8 @@ class Flow(models.Model):
         ]
         indexes = [
             models.Index(fields=("network", "started_at")),
+            models.Index(fields=("src_network", "started_at"), name="flow_src_network_started_idx"),
+            models.Index(fields=("dst_network", "started_at"), name="flow_dst_network_started_idx"),
             models.Index(fields=("src_ip", "started_at")),
             models.Index(fields=("dst_ip", "started_at")),
             models.Index(fields=("direction", "started_at")),
@@ -75,4 +91,3 @@ class Flow(models.Model):
 
     def __str__(self):
         return f"{self.src_ip}:{self.src_port or '-'} → {self.dst_ip}:{self.dst_port or '-'}"
-
