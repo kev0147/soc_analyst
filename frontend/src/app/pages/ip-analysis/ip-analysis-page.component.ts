@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
 import { IpAnalysisRecord } from '../../core/api/api.types';
@@ -121,7 +121,7 @@ import { IpAnalysisRecord } from '../../core/api/api.types';
     </div>
   `,
 })
-export class IpAnalysisPageComponent implements OnInit {
+export class IpAnalysisPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   readonly message = signal('');
   readonly records = signal<IpAnalysisRecord[]>([]);
@@ -134,6 +134,7 @@ export class IpAnalysisPageComponent implements OnInit {
     virustotal: true,
     shodan: true,
   };
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit() {
     this.load();
@@ -144,12 +145,31 @@ export class IpAnalysisPageComponent implements OnInit {
       .filter(([, enabled]) => enabled)
       .map(([name]) => name);
     this.api.launchIpAnalysis({ scope: this.scope, import_id: this.importId ?? undefined, tools: selectedTools }).subscribe({
-      next: () => {
-        this.message.set('Analyse terminée. Résultats mis à jour.');
-        this.load();
+      next: (response) => {
+        this.message.set(response.already_queued ? 'Cette analyse est déjà en file.' : 'Analyse ajoutée à la file.');
+        this.poll(response.job.id);
       },
       error: () => this.message.set('Analyse impossible. Vérifie que le backend tourne et que les clés API sont configurées.'),
     });
+  }
+
+  private poll(jobId: string) {
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.pollTimer = setTimeout(() => {
+      this.api.backgroundJob(jobId).subscribe({
+        next: (job) => {
+          const progress = job.progress_percent === null ? job.progress_current : `${job.progress_percent}%`;
+          this.message.set(job.status === 'failed' ? `Échec : ${job.error_message}` : `${job.status_message || job.status}${progress ? ` — ${progress}` : ''}`);
+          if (job.status === 'completed') this.load();
+          if (job.status === 'queued' || job.status === 'running') this.poll(job.id);
+        },
+        error: () => this.message.set('Impossible de suivre le job.'),
+      });
+    }, 1500);
+  }
+
+  ngOnDestroy() {
+    if (this.pollTimer) clearTimeout(this.pollTimer);
   }
 
   load() {

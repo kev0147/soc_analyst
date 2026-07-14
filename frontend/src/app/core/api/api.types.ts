@@ -26,6 +26,24 @@ export interface FlowImport {
   inserted_flows: number;
   reused_flows: number;
   rejected_rows: number;
+  latest_job?: BackgroundJob | null;
+}
+
+export interface BackgroundJob {
+  id: string;
+  kind: 'flow_import' | 'ip_reputation';
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  status_message: string;
+  progress_current: number;
+  progress_total: number;
+  progress_percent: number | null;
+  error_message: string;
+  can_retry: boolean;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  flow_import: number | null;
+  result: Record<string, unknown>;
 }
 
 export interface Structure {

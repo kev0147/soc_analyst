@@ -3,6 +3,9 @@ from django.urls import path
 from analyst.controllers.user.login import LoginController
 from analyst.controllers.user.logout import LogoutController
 from analyst.controllers.user.me import CurrentUserController
+from analyst.controllers.background_job.list import BackgroundJobListController
+from analyst.controllers.background_job.retrieve import BackgroundJobRetrieveController
+from analyst.controllers.background_job.retry import BackgroundJobRetryController
 from analyst.controllers.bulletin.restore import BulletinRestoreController
 from analyst.controllers.password_reset_token.consume import PasswordResetTokenConsumeController
 from analyst.controllers.user.list import UserListController
@@ -127,6 +130,9 @@ from analyst.controllers.bulletin_finding.delete import BulletinFindingDeleteCon
 app_name = "analyst"
 
 urlpatterns = [
+    path("background-jobs/", BackgroundJobListController.as_view(), name="background_job-list"),
+    path("background-jobs/<uuid:pk>/", BackgroundJobRetrieveController.as_view(), name="background_job-retrieve"),
+    path("background-jobs/<uuid:pk>/retry/", BackgroundJobRetryController.as_view(), name="background_job-retry"),
     path("auth/login/", LoginController.as_view(), name="login"),
     path("auth/logout/", LogoutController.as_view(), name="logout"),
     path("auth/me/", CurrentUserController.as_view(), name="current-user"),

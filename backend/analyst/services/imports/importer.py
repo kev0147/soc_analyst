@@ -194,8 +194,7 @@ def _write_rejections(flow_import: FlowImport, rejected: list[dict]) -> str:
     return _path_for_model(target)
 
 
-@transaction.atomic
-def confirm_flow_import(flow_import: FlowImport) -> FlowImport:
+def confirm_flow_import(flow_import: FlowImport, progress_callback=None) -> FlowImport:
     if flow_import.status != ImportStatus.PENDING:
         raise ValueError("Seul un import en attente peut être confirmé.")
 
@@ -216,6 +215,10 @@ def confirm_flow_import(flow_import: FlowImport) -> FlowImport:
         flow_import.completed_at = timezone.now()
         flow_import.save(update_fields=("status", "error_message", "completed_at"))
         return flow_import
+
+    expected_rows = sum(1 for _row_number, _row in iter_rows(path, detection.encoding, detection.delimiter))
+    if progress_callback:
+        progress_callback(0, expected_rows, "Préparation des lignes")
 
     cidr_index = _structure_cidr_index(flow_import.structure)
     if not cidr_index:
@@ -260,6 +263,8 @@ def confirm_flow_import(flow_import: FlowImport) -> FlowImport:
                 "subject_ip": row.get("Subject IP Address") or row.get("searchSubject.ipAddress", ""),
                 "peer_ip": row.get("Peer IP Address") or row.get("peer.ipAddress", ""),
             })
+        if progress_callback and (total_rows % 100 == 0 or total_rows == expected_rows):
+            progress_callback(total_rows, expected_rows, f"{total_rows} ligne(s) traitée(s)")
 
     rejection_path = _write_rejections(flow_import, rejected)
     flow_import.detected_encoding = detection.encoding
@@ -277,4 +282,6 @@ def confirm_flow_import(flow_import: FlowImport) -> FlowImport:
     flow_import.completed_at = timezone.now()
     flow_import.status = ImportStatus.COMPLETED_WITH_ERRORS if rejected else ImportStatus.COMPLETED
     flow_import.save()
+    if progress_callback:
+        progress_callback(total_rows, expected_rows, "Import terminé")
     return flow_import

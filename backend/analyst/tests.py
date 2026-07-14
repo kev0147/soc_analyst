@@ -8,11 +8,13 @@ from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
 from .models import (
+    AuditEvent,
     Bulletin,
     BulletinFinding,
     BulletinIP,
     BulletinResponse,
     BulletinTypeCatalog,
+    BackgroundJob,
     Flow,
     FlowImport,
     IPReputation,
@@ -30,6 +32,8 @@ from .models import (
 from .models.choices import (
     BulletinIPRole,
     BulletinSeverity,
+    BackgroundJobKind,
+    BackgroundJobStatus,
     FlowDirection,
     ImportStatus,
     MappingMethod,
@@ -48,6 +52,7 @@ from .controllers.audit import record_audit
 from .services.ip_reputation import candidate_ips, run_reputation_analysis
 from .services.ip_reputation.clients import ReputationClientResult
 from .services.peer_observations import sync_peer_observations
+from .services.jobs.tasks import execute_background_job
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
@@ -372,6 +377,124 @@ class FlowImportServiceTests(TestCase):
 
         self.assertEqual(flow_import.accepted_rows, 1)
         self.assertEqual(Flow.objects.get(sna_flow_id="specific").network, specific_network)
+
+
+class BackgroundJobTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="jobs@example.com",
+            password="a-long-test-password",
+            role=UserRole.ANALYST,
+        )
+        self.structure = Structure.objects.create(name="Structure jobs", code="JOB")
+        self.network = Network.objects.create(structure=self.structure, name="Réseau jobs")
+        NetworkCIDR.objects.create(network=self.network, cidr="10.30.0.0/16")
+
+    def test_flow_import_job_completes_and_reports_progress(self):
+        csv_body = (
+            "Flow ID,Start,Subject IP Address,Subject Orientation,Subject Port/Protocol,"
+            "Peer IP Address,Peer Orientation,Peer Port/Protocol,protocol\n"
+            "job-flow,2026-07-08T10:00:00Z,10.30.1.20,Client,50000/TCP,198.51.100.1,Server,443/TCP,TCP\n"
+        )
+        upload = SimpleUploadedFile("job-flows.csv", csv_body.encode("utf-8"), content_type="text/csv")
+        with self.settings(MEDIA_ROOT=TEST_MEDIA_ROOT):
+            preview = preview_flow_import_upload(upload, self.structure, self.user)
+            flow_import = FlowImport.objects.get(pk=preview["import_id"])
+            job = BackgroundJob.objects.create(
+                kind=BackgroundJobKind.FLOW_IMPORT,
+                created_by=self.user,
+                flow_import=flow_import,
+                payload={"import_id": flow_import.id},
+            )
+            result = execute_background_job(str(job.id))
+
+        job.refresh_from_db()
+        flow_import.refresh_from_db()
+        self.assertEqual(job.status, BackgroundJobStatus.COMPLETED)
+        self.assertEqual(job.progress_current, 1)
+        self.assertEqual(job.progress_total, 1)
+        self.assertEqual(job.progress_percent, 100)
+        self.assertEqual(result["accepted_rows"], 1)
+        self.assertEqual(flow_import.status, ImportStatus.COMPLETED)
+        self.assertTrue(AuditEvent.objects.filter(action="BACKGROUND_JOB_COMPLETED", entity_id=str(job.id)).exists())
+
+    def test_job_failure_is_persisted_and_audited(self):
+        job = BackgroundJob.objects.create(
+            kind=BackgroundJobKind.FLOW_IMPORT,
+            created_by=self.user,
+            payload={},
+        )
+
+        with self.assertRaises(ValueError):
+            execute_background_job(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, BackgroundJobStatus.FAILED)
+        self.assertTrue(job.error_message)
+        self.assertTrue(job.can_retry)
+        self.assertTrue(AuditEvent.objects.filter(action="BACKGROUND_JOB_FAILED", entity_id=str(job.id)).exists())
+
+    def test_empty_ip_reputation_job_completes(self):
+        job = BackgroundJob.objects.create(
+            kind=BackgroundJobKind.IP_REPUTATION,
+            created_by=self.user,
+            payload={"scope": "all_flows", "tools": [ReputationSource.ABUSEIPDB], "limit": 10},
+        )
+
+        result = execute_background_job(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, BackgroundJobStatus.COMPLETED)
+        self.assertEqual(job.progress_percent, 100)
+        self.assertEqual(result["candidate_count"], 0)
+
+
+class BackgroundJobApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="jobs-api@example.com",
+            password="a-long-test-password",
+            role=UserRole.ANALYST,
+        )
+        self.structure = Structure.objects.create(name="Structure jobs API", code="JAPI")
+        self.client.force_login(self.user)
+
+    def test_confirm_import_returns_a_persistent_queued_job(self):
+        flow_import = FlowImport.objects.create(
+            structure=self.structure,
+            uploaded_by=self.user,
+            status=ImportStatus.PENDING,
+            original_filename="queued.csv",
+            stored_path="queued.csv",
+            file_sha256="0" * 64,
+            file_size_bytes=10,
+        )
+
+        response = self.client.post(
+            "/api/v1/flow-imports/confirm/",
+            {"import_id": flow_import.id},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["job"]["status"], BackgroundJobStatus.QUEUED)
+        self.assertEqual(response.json()["flow_import"]["id"], flow_import.id)
+        self.assertEqual(BackgroundJob.objects.filter(flow_import=flow_import).count(), 1)
+
+    def test_ip_analysis_endpoint_returns_same_active_job_for_same_payload(self):
+        payload = {
+            "scope": "all_flows",
+            "tools": [ReputationSource.ABUSEIPDB],
+            "limit": 10,
+        }
+
+        first = self.client.post("/api/v1/ip-analysis/run/", payload, content_type="application/json")
+        second = self.client.post("/api/v1/ip-analysis/run/", payload, content_type="application/json")
+
+        self.assertEqual(first.status_code, 202)
+        self.assertEqual(second.status_code, 202)
+        self.assertEqual(first.json()["job"]["id"], second.json()["job"]["id"])
+        self.assertTrue(second.json()["already_queued"])
 
 
 class FlowExplorationTests(TestCase):

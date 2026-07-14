@@ -2,13 +2,12 @@ import ipaddress
 from collections import defaultdict
 from dataclasses import dataclass
 
-from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
 from analyst.models import Flow, FlowImport, IPReputation, IPReputationResult
 from analyst.models.choices import ReputationSource, ReputationStatus
-from analyst.services.imports.flow_mapper import internal_cidrs_for_network
+from analyst.services.imports.flow_mapper import internal_cidrs_for_structure
 from analyst.services.peer_observations import sync_peer_observations
 
 from .clients import CLIENTS, ReputationClientResult
@@ -29,7 +28,7 @@ class CandidateIP:
 
 
 def _flow_queryset(scope: str, import_id: int | None = None):
-    queryset = Flow.objects.select_related("network").all()
+    queryset = Flow.objects.select_related("network", "network__structure").all()
     if scope == "import":
         if not import_id:
             raise ValueError("import_id est obligatoire pour scope=import.")
@@ -49,9 +48,10 @@ def _external_ip_stats(flows) -> dict[str, dict]:
     stats = defaultdict(lambda: {"flow_count": 0, "first_seen_at": None, "last_seen_at": None})
     cidr_cache = {}
     for flow in flows.iterator(chunk_size=1000):
-        if flow.network_id not in cidr_cache:
-            cidr_cache[flow.network_id] = internal_cidrs_for_network(flow.network)
-        cidrs = cidr_cache[flow.network_id]
+        structure_id = flow.network.structure_id
+        if structure_id not in cidr_cache:
+            cidr_cache[structure_id] = internal_cidrs_for_structure(flow.network.structure)
+        cidrs = cidr_cache[structure_id]
         for ip in (flow.src_ip, flow.dst_ip):
             if _is_internal(ip, cidrs):
                 continue
@@ -122,14 +122,23 @@ def _refresh_reputation(reputation: IPReputation, candidate: CandidateIP):
     reputation.save()
 
 
-@transaction.atomic
-def run_reputation_analysis(scope: str = "all_flows", import_id: int | None = None, tools: list[str] | None = None, limit: int = DEFAULT_LIMIT, client_classes=None) -> dict:
+def run_reputation_analysis(
+    scope: str = "all_flows",
+    import_id: int | None = None,
+    tools: list[str] | None = None,
+    limit: int = DEFAULT_LIMIT,
+    client_classes=None,
+    progress_callback=None,
+) -> dict:
     selected_tools = _enabled_tools(tools)
     candidates = candidate_ips(scope=scope, import_id=import_id, limit=limit)
     clients = client_classes or CLIENTS
     analyzed = []
 
-    for candidate in candidates:
+    if progress_callback:
+        progress_callback(0, len(candidates), "Préparation des candidats")
+
+    for index, candidate in enumerate(candidates, start=1):
         reputation, _ = IPReputation.objects.get_or_create(ip_address=candidate.ip_address)
         for tool in selected_tools:
             if reputation.results.filter(source=tool, status=ReputationStatus.SUCCESS).exists():
@@ -139,7 +148,11 @@ def run_reputation_analysis(scope: str = "all_flows", import_id: int | None = No
             _upsert_result(reputation, result)
         _refresh_reputation(reputation, candidate)
         analyzed.append(reputation)
+        if progress_callback:
+            progress_callback(index, len(candidates), f"Analyse de {candidate.ip_address}")
 
+    if progress_callback:
+        progress_callback(len(candidates), len(candidates), "Synchronisation des observations")
     observation_sync = sync_peer_observations(scope=scope, import_id=import_id)
 
     return {

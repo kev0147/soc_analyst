@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
@@ -58,6 +58,7 @@ import { formatBytes } from '../../shared/formatters';
                 <th>Lignes</th>
                 <th>Acceptées</th>
                 <th>Rejetées</th>
+                <th>Progression</th>
                 <th>Date import</th>
                 <th>Début flows</th>
                 <th>Fin flows</th>
@@ -74,12 +75,13 @@ import { formatBytes } from '../../shared/formatters';
                   <td>{{ item.total_rows }}</td>
                   <td>{{ item.accepted_rows }}</td>
                   <td>{{ item.rejected_rows }}</td>
+                  <td>{{ jobProgress(item) }}</td>
                   <td>{{ item.uploaded_at | date:'medium' }}</td>
                   <td>{{ item.period_start ? (item.period_start | date:'medium') : '-' }}</td>
                   <td>{{ item.period_end ? (item.period_end | date:'medium') : '-' }}</td>
                 </tr>
               } @empty {
-                <tr><td colspan="11"><div class="empty">Aucun import.</div></td></tr>
+                <tr><td colspan="12"><div class="empty">Aucun import.</div></td></tr>
               }
             </tbody>
           </table>
@@ -88,7 +90,7 @@ import { formatBytes } from '../../shared/formatters';
     </div>
   `,
 })
-export class ImportsPageComponent implements OnInit {
+export class ImportsPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   readonly imports = signal<FlowImport[]>([]);
   readonly structures = signal<Structure[]>([]);
@@ -97,6 +99,7 @@ export class ImportsPageComponent implements OnInit {
   readonly previewImportId = signal<number | null>(null);
   readonly bytes = formatBytes;
   structureId = 0;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit() {
     this.load();
@@ -109,7 +112,13 @@ export class ImportsPageComponent implements OnInit {
   }
 
   load() {
-    this.api.imports().subscribe((data) => this.imports.set(data.results));
+    this.api.imports().subscribe((data) => {
+      this.imports.set(data.results);
+      const active = data.results.find((item) => ['queued', 'running'].includes(item.latest_job?.status || ''));
+      if (active?.latest_job) {
+        this.poll(active.latest_job.id);
+      }
+    });
   }
 
   selectFile(event: Event) {
@@ -146,13 +155,40 @@ export class ImportsPageComponent implements OnInit {
     if (!id) return;
     this.message.set('Import en cours...');
     this.api.confirmImport(id).subscribe({
-      next: () => {
-        this.message.set('Import confirmé.');
+      next: (response) => {
+        this.message.set(response.already_queued ? 'Import déjà en file.' : 'Import ajouté à la file.');
         this.previewImportId.set(null);
         this.load();
+        this.poll(response.job.id);
       },
       error: (error) => this.message.set(this.errorMessage(error, 'Erreur pendant la confirmation.')),
     });
+  }
+
+  jobProgress(item: FlowImport): string {
+    const job = item.latest_job;
+    if (!job) return '-';
+    if (job.status === 'failed') return `Échec : ${job.error_message}`;
+    if (job.progress_percent !== null) return `${job.status} — ${job.progress_percent}%`;
+    if (job.progress_current) return `${job.status} — ${job.progress_current} ligne(s)`;
+    return job.status_message || job.status;
+  }
+
+  private poll(jobId: string) {
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.pollTimer = setTimeout(() => {
+      this.api.backgroundJob(jobId).subscribe({
+        next: (job) => {
+          this.message.set(job.status === 'failed' ? `Échec : ${job.error_message}` : job.status_message || job.status);
+          this.load();
+          if (job.status === 'queued' || job.status === 'running') this.poll(job.id);
+        },
+      });
+    }, 1500);
+  }
+
+  ngOnDestroy() {
+    if (this.pollTimer) clearTimeout(this.pollTimer);
   }
 
   private errorMessage(error: any, fallback: string): string {

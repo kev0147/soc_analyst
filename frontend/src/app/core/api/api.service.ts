@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   Bulletin,
+  BackgroundJob,
   CatalogItem,
   DashboardOverview,
   Flow,
@@ -59,8 +60,11 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/flow-imports/preview/`, form);
   }
 
-  confirmImport(importId: number): Observable<FlowImport> {
-    return this.http.post<FlowImport>(`${this.baseUrl}/flow-imports/confirm/`, { import_id: importId });
+  confirmImport(importId: number): Observable<{ job: BackgroundJob; flow_import: FlowImport; already_queued: boolean }> {
+    return this.http.post<{ job: BackgroundJob; flow_import: FlowImport; already_queued: boolean }>(
+      `${this.baseUrl}/flow-imports/confirm/`,
+      { import_id: importId },
+    );
   }
 
   flows(params: QueryParams = {}): Observable<PaginatedResponse<Flow>> {
@@ -121,8 +125,20 @@ export class ApiService {
     return this.http.get<PaginatedResponse<IpAnalysisRecord>>(`${this.baseUrl}/ip-analysis/records/`, { params: this.params(params) });
   }
 
-  launchIpAnalysis(payload: { scope: 'all_flows' | 'import'; import_id?: number; tools: string[] }): Observable<unknown> {
-    return this.http.post(`${this.baseUrl}/ip-analysis/run/`, payload);
+  launchIpAnalysis(payload: { scope: 'all_flows' | 'import'; import_id?: number; tools: string[] }): Observable<{ job: BackgroundJob; already_queued: boolean }> {
+    return this.http.post<{ job: BackgroundJob; already_queued: boolean }>(`${this.baseUrl}/ip-analysis/run/`, payload);
+  }
+
+  backgroundJobs(params: QueryParams = {}): Observable<PaginatedResponse<BackgroundJob>> {
+    return this.http.get<PaginatedResponse<BackgroundJob>>(`${this.baseUrl}/background-jobs/`, { params: this.params(params) });
+  }
+
+  backgroundJob(id: string): Observable<BackgroundJob> {
+    return this.http.get<BackgroundJob>(`${this.baseUrl}/background-jobs/${id}/`);
+  }
+
+  retryBackgroundJob(id: string): Observable<BackgroundJob> {
+    return this.http.post<BackgroundJob>(`${this.baseUrl}/background-jobs/${id}/retry/`, {});
   }
 
   private params(values: QueryParams): HttpParams {

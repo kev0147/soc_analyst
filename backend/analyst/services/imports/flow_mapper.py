@@ -103,6 +103,14 @@ def internal_cidrs_for_network(network: Network) -> tuple[ipaddress.IPv4Network,
     return tuple(ipaddress.ip_network(cidr.cidr, strict=False) for cidr in network.cidrs.all())
 
 
+def internal_cidrs_for_structure(structure) -> tuple[ipaddress.IPv4Network, ...]:
+    return tuple(
+        ipaddress.ip_network(cidr, strict=False)
+        for cidr in structure.networks.filter(is_active=True).values_list("cidrs__cidr", flat=True)
+        if cidr
+    )
+
+
 def endpoint_ips_for_row(row: dict[str, str]) -> tuple[str, str]:
     """Retourne les IP Subject/Peer des deux formats CSV SNA pris en charge."""
     return _endpoint(row, "Subject").ip, _endpoint(row, "Peer").ip

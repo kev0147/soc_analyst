@@ -70,3 +70,15 @@ class ReputationStatus(models.TextChoices):
     SUCCESS = "success", "Succès"
     SKIPPED = "skipped", "Ignoré"
     ERROR = "error", "Erreur"
+
+
+class BackgroundJobKind(models.TextChoices):
+    FLOW_IMPORT = "flow_import", "Import de flows"
+    IP_REPUTATION = "ip_reputation", "Analyse de réputation IP"
+
+
+class BackgroundJobStatus(models.TextChoices):
+    QUEUED = "queued", "En attente"
+    RUNNING = "running", "En cours"
+    COMPLETED = "completed", "Terminé"
+    FAILED = "failed", "Échoué"

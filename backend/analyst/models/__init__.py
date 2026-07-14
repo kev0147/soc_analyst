@@ -1,4 +1,5 @@
 from .audit_event import AuditEvent
+from .background_job import BackgroundJob
 from .bulletin import Bulletin
 from .bulletin_attachment import BulletinAttachment
 from .bulletin_finding import BulletinFinding
@@ -26,6 +27,7 @@ from .user import User
 
 __all__ = [
     "AuditEvent",
+    "BackgroundJob",
     "Bulletin",
     "BulletinAttachment",
     "BulletinFinding",

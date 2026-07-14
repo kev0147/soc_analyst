@@ -1,4 +1,5 @@
 from .audit_event import AuditEventSerializer
+from .background_job import BackgroundJobSerializer
 from .bulletin import BulletinSerializer
 from .bulletin_attachment import BulletinAttachmentSerializer
 from .bulletin_finding import BulletinFindingSerializer
