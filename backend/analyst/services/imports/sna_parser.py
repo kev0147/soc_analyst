@@ -4,11 +4,11 @@ from pathlib import Path
 from typing import Iterator
 
 
-REQUIRED_COLUMNS = {
-    "Flow ID",
-    "Start",
-    "Subject IP Address",
-    "Peer IP Address",
+REQUIRED_COLUMN_GROUPS = {
+    "Flow ID": {"Flow ID", "id"},
+    "Start": {"Start", "firstActiveTime"},
+    "Subject IP Address": {"Subject IP Address", "searchSubject.ipAddress"},
+    "Peer IP Address": {"Peer IP Address", "peer.ipAddress"},
 }
 
 USEFUL_COLUMNS = {
@@ -48,6 +48,42 @@ USEFUL_COLUMNS = {
     "Peer Bytes",
     "Peer Packets",
     "Actions",
+    "id",
+    "domainId",
+    "deviceId",
+    "firstActiveTime",
+    "lastActiveTime",
+    "activeDuration",
+    "searchSubject.ipAddress",
+    "searchSubject.name",
+    "searchSubject.percentTransferBytes",
+    "searchSubject.transferBytes",
+    "searchSubject.transferPackets",
+    "searchSubject.transferByteRate",
+    "searchSubject.transferPacketRate",
+    "searchSubject.orientation",
+    "searchSubject.hostGroups",
+    "searchSubject.interfaces.flowAction",
+    "searchSubject.portProtocol.port",
+    "searchSubject.portProtocol.protocol",
+    "peer.ipAddress",
+    "peer.name",
+    "peer.percentTransferBytes",
+    "peer.transferBytes",
+    "peer.transferPackets",
+    "peer.transferByteRate",
+    "peer.transferPacketRate",
+    "peer.orientation",
+    "peer.hostGroups",
+    "peer.portProtocol.port",
+    "peer.portProtocol.protocol",
+    "connection.transferBytes",
+    "connection.transferPackets",
+    "connection.transferByteRate",
+    "connection.transferPacketRate",
+    "connection.tcpConnections",
+    "connection.tcpRetransmissions",
+    "connection.application.name",
 }
 
 
@@ -73,9 +109,14 @@ def read_header(path: Path, encoding: str, delimiter: str = ",") -> SNAHeaderRep
 
     normalized_columns = [column.strip() for column in columns]
     present = set(normalized_columns)
+    missing_required = [
+        canonical
+        for canonical, aliases in REQUIRED_COLUMN_GROUPS.items()
+        if not present.intersection(aliases)
+    ]
     return SNAHeaderReport(
         columns=normalized_columns,
-        missing_required=sorted(REQUIRED_COLUMNS - present),
+        missing_required=missing_required,
         recognized=[column for column in normalized_columns if column in USEFUL_COLUMNS],
         ignored=[column for column in normalized_columns if column not in USEFUL_COLUMNS],
     )

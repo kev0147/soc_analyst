@@ -74,7 +74,11 @@ def datetime_utc(value: Any) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(normalized)
     except ValueError:
-        return None
+        try:
+            parsed = datetime.strptime(normalized, "%a %b %d %H:%M:%S %Z %Y")
+        except ValueError:
+            return None
+        parsed = parsed.replace(tzinfo=timezone.utc)
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)

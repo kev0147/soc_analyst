@@ -14,6 +14,30 @@ from .normalizer import (
 )
 
 
+def _first(row: dict[str, str], *names: str):
+    for name in names:
+        value = row.get(name)
+        if text_or_blank(value):
+            return value
+    return None
+
+
+def _port_protocol_from_fields(row: dict[str, str], port_name: str, protocol_name: str) -> tuple[int | None, str]:
+    port = integer(row.get(port_name))
+    protocol = text_or_blank(row.get(protocol_name)).upper()
+    return port, protocol
+
+
+def _duration(value) -> int | None:
+    parsed = duration_seconds(value)
+    if parsed is None:
+        return None
+    # Le format technique activeDuration est en millisecondes.
+    if isinstance(value, str) and value.strip().isdigit() and parsed >= 1000:
+        return int(parsed / 1000)
+    return parsed
+
+
 @dataclass(frozen=True)
 class Endpoint:
     ip: str
@@ -37,17 +61,24 @@ def _role(value: str | None) -> str:
 
 
 def _endpoint(row: dict[str, str], prefix: str) -> Endpoint:
+    technical_prefix = "searchSubject" if prefix == "Subject" else "peer"
     port, protocol_from_port = port_protocol(row.get(f"{prefix} Port/Protocol"))
+    if port is None and not protocol_from_port:
+        port, protocol_from_port = _port_protocol_from_fields(
+            row,
+            f"{technical_prefix}.portProtocol.port",
+            f"{technical_prefix}.portProtocol.protocol",
+        )
     return Endpoint(
-        ip=text_or_blank(row.get(f"{prefix} IP Address")),
-        hostname=text_or_blank(row.get(f"{prefix} Hostname")),
+        ip=text_or_blank(_first(row, f"{prefix} IP Address", f"{technical_prefix}.ipAddress")),
+        hostname=text_or_blank(_first(row, f"{prefix} Hostname", f"{technical_prefix}.name")),
         port=port,
-        role=_role(row.get(f"{prefix} Orientation")),
+        role=_role(_first(row, f"{prefix} Orientation", f"{technical_prefix}.orientation")),
         location=text_or_blank(row.get(f"{prefix} Location")),
         asn=integer(row.get(f"{prefix} ASN")),
         asn_assignment=text_or_blank(row.get(f"{prefix} ASN Assignment")),
-        bytes=integer(row.get(f"{prefix} Bytes")),
-        packets=integer(row.get(f"{prefix} Packets")),
+        bytes=integer(_first(row, f"{prefix} Bytes", f"{technical_prefix}.transferBytes")),
+        packets=integer(_first(row, f"{prefix} Packets", f"{technical_prefix}.transferPackets")),
     )
 
 
@@ -92,24 +123,30 @@ def map_sna_row(row: dict[str, str], network: Network, internal_cidrs: tuple[ipa
         src, dst = subject, peer
         mapping_method = MappingMethod.SUBJECT_PEER_FALLBACK
 
-    started_at = datetime_utc(row.get("Start"))
+    started_at = datetime_utc(_first(row, "Start", "firstActiveTime"))
     if not started_at:
         raise ValueError("Start invalide ou manquant.")
 
     subject_port, subject_protocol = port_protocol(row.get("Subject Port/Protocol"))
+    if subject_port is None and not subject_protocol:
+        subject_port, subject_protocol = _port_protocol_from_fields(
+            row, "searchSubject.portProtocol.port", "searchSubject.portProtocol.protocol"
+        )
     peer_port, peer_protocol = port_protocol(row.get("Peer Port/Protocol"))
+    if peer_port is None and not peer_protocol:
+        peer_port, peer_protocol = _port_protocol_from_fields(row, "peer.portProtocol.port", "peer.portProtocol.protocol")
     protocol = text_or_blank(row.get("protocol")) or subject_protocol or peer_protocol
     protocol = protocol.upper()
     cidrs = internal_cidrs if internal_cidrs is not None else internal_cidrs_for_network(network)
 
     return {
         "network": network,
-        "sna_flow_id": text_or_blank(row.get("Flow ID")),
-        "domain": text_or_blank(row.get("Domain")),
+        "sna_flow_id": text_or_blank(_first(row, "Flow ID", "id")),
+        "domain": text_or_blank(_first(row, "Domain", "domainId")),
         "started_at": started_at,
-        "ended_at": datetime_utc(row.get("End")),
-        "duration_seconds": duration_seconds(row.get("Duration")),
-        "flow_action": text_or_blank(row.get("Flow Action")),
+        "ended_at": datetime_utc(_first(row, "End", "lastActiveTime")),
+        "duration_seconds": _duration(_first(row, "Duration", "activeDuration")),
+        "flow_action": text_or_blank(_first(row, "Flow Action", "searchSubject.interfaces.flowAction")),
         "mapping_method": mapping_method,
         "direction": _direction(src.ip, dst.ip, cidrs),
         "src_ip": src.ip,
@@ -132,14 +169,14 @@ def map_sna_row(row: dict[str, str], network: Network, internal_cidrs: tuple[ipa
         "dst_packets": dst.packets,
         "protocol": protocol,
         "service": text_or_blank(row.get("Service")),
-        "application": text_or_blank(row.get("Application")),
+        "application": text_or_blank(_first(row, "Application", "connection.application.name")),
         "appliance": text_or_blank(row.get("Appliance")),
-        "byte_rate": floating(row.get("Byte Rate")),
-        "packet_rate": floating(row.get("Packet Rate")),
-        "total_bytes": integer(row.get("Total Bytes")),
-        "total_packets": integer(row.get("Total Packets")),
-        "tcp_connections": integer(row.get("TCP Connections")),
-        "tcp_retransmissions": integer(row.get("TCP Retransmissions"), column="TCP Retransmissions"),
+        "byte_rate": floating(_first(row, "Byte Rate", "connection.transferByteRate")),
+        "packet_rate": floating(_first(row, "Packet Rate", "connection.transferPacketRate")),
+        "total_bytes": integer(_first(row, "Total Bytes", "connection.transferBytes")),
+        "total_packets": integer(_first(row, "Total Packets", "connection.transferPackets")),
+        "tcp_connections": integer(_first(row, "TCP Connections", "connection.tcpConnections")),
+        "tcp_retransmissions": integer(_first(row, "TCP Retransmissions", "connection.tcpRetransmissions"), column="TCP Retransmissions"),
         "tcp_retransmission_ratio": floating(row.get("TCP Retransmission Ratio"), column="TCP Retransmission Ratio"),
         "actions": text_or_blank(row.get("Actions")),
     }

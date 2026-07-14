@@ -123,10 +123,15 @@ export class ImportsPageComponent implements OnInit {
     this.api.previewImport(this.networkId, file).subscribe({
       next: (result: any) => {
         this.previewImportId.set(result.import_id);
-        this.message.set(result.is_valid ? 'Prévalidation OK. Tu peux confirmer.' : 'Prévalidation avec erreurs.');
+        if (result.is_valid) {
+          this.message.set('Prévalidation OK. Tu peux confirmer.');
+        } else {
+          const missing = result.errors?.[0]?.columns?.join(', ') || '-';
+          this.message.set(`Prévalidation avec erreurs. Colonnes manquantes : ${missing}`);
+        }
         this.load();
       },
-      error: () => this.message.set('Erreur pendant la prévalidation.'),
+      error: (error) => this.message.set(this.errorMessage(error, 'Erreur pendant la prévalidation.')),
     });
   }
 
@@ -140,7 +145,21 @@ export class ImportsPageComponent implements OnInit {
         this.previewImportId.set(null);
         this.load();
       },
-      error: () => this.message.set('Erreur pendant la confirmation.'),
+      error: (error) => this.message.set(this.errorMessage(error, 'Erreur pendant la confirmation.')),
     });
+  }
+
+  private errorMessage(error: any, fallback: string): string {
+    const body = error?.error;
+    if (body?.detail) {
+      return body.detail;
+    }
+    if (body?.file?.length) {
+      return `Fichier : ${body.file.join(', ')}`;
+    }
+    if (body?.network_id?.length) {
+      return `Réseau : ${body.network_id.join(', ')}`;
+    }
+    return fallback;
   }
 }
