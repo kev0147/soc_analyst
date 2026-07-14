@@ -132,7 +132,8 @@ export class ApiService {
 
   private resolveBaseUrl(): string {
     if (typeof window !== 'undefined' && window.location.port === '4200') {
-      return 'http://127.0.0.1:8000/api/v1';
+      const hostname = window.location.hostname || '127.0.0.1';
+      return `http://${hostname}:8000/api/v1`;
     }
     return '/api/v1';
   }
