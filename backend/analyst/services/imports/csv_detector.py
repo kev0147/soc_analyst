@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
+MAX_UPLOAD_SIZE_MIB = 500
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MIB * 1024 * 1024
 SUPPORTED_ENCODINGS = ("utf-8-sig", "utf-8", "cp1252")
 EXPECTED_DELIMITER = ","
 
@@ -28,7 +29,7 @@ def file_sha256(path: Path) -> str:
 def detect_csv(path: Path) -> CSVDetectionResult:
     size_bytes = path.stat().st_size
     if size_bytes > MAX_UPLOAD_SIZE_BYTES:
-        raise ValueError("Le fichier dépasse la limite MVP de 100 Mo.")
+        raise ValueError(f"Le fichier dépasse la limite de {MAX_UPLOAD_SIZE_MIB} Mo.")
 
     raw_sample = path.read_bytes()[:64 * 1024]
     detected_encoding = None

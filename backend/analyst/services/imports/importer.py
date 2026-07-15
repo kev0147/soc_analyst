@@ -13,7 +13,7 @@ from django.utils import timezone
 from analyst.models import Flow, FlowImport, FlowImportItem, Network, Structure
 from analyst.models.choices import ImportStatus
 
-from .csv_detector import MAX_UPLOAD_SIZE_BYTES, detect_csv
+from .csv_detector import MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MIB, detect_csv
 from .flow_mapper import endpoint_ips_for_row, map_sna_row
 from .sna_parser import iter_rows, read_header
 
@@ -95,7 +95,7 @@ def _safe_filename(filename: str) -> str:
 
 def _store_upload(uploaded_file: UploadedFile) -> Path:
     if uploaded_file.size and uploaded_file.size > MAX_UPLOAD_SIZE_BYTES:
-        raise ValueError("Le fichier dépasse la limite MVP de 100 Mo.")
+        raise ValueError(f"Le fichier dépasse la limite de {MAX_UPLOAD_SIZE_MIB} Mo.")
     target_dir = _import_storage_dir()
     target = target_dir / f"{timezone.now():%Y%m%d%H%M%S%f}_{_safe_filename(uploaded_file.name)}"
     with target.open("wb") as handle:
