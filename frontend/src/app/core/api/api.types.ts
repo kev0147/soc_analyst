@@ -91,6 +91,10 @@ export interface DashboardOverview {
     bulletins: number;
     latest_flow_at: string | null;
   };
+  top_malicious_ips_by_volume: MaliciousIpDashboardStat[];
+  top_malicious_ips_by_duration: MaliciousIpDashboardStat[];
+  top_hosts_with_malicious_by_volume: MaliciousHostDashboardStat[];
+  top_hosts_with_malicious_by_duration: MaliciousHostDashboardStat[];
   top_talkers: Array<Record<string, unknown>>;
   top_conversations: Array<Record<string, unknown>>;
   top_ports_protocols: {
@@ -99,6 +103,28 @@ export interface DashboardOverview {
   };
   latest_malicious_ips?: Array<Record<string, unknown>>;
   hosts_communicating_with_malicious?: Array<Record<string, unknown>>;
+}
+
+export interface MaliciousIpDashboardStat {
+  ip_address: string;
+  country: string;
+  score: number | null;
+  flow_count: number;
+  total_bytes: number;
+  total_duration_seconds: number;
+  host_count: number;
+  host_ips: string[];
+  last_seen_at: string | null;
+}
+
+export interface MaliciousHostDashboardStat {
+  host_ip: string;
+  flow_count: number;
+  total_bytes: number;
+  total_duration_seconds: number;
+  malicious_peer_count: number;
+  malicious_ips: string[];
+  last_seen_at: string | null;
 }
 
 export interface Bulletin {

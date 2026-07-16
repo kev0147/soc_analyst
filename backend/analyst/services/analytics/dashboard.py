@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import defaultdict
 
 from django.db.models import Count, Max, Q, Sum
 from django.db.models.functions import Coalesce
@@ -7,7 +7,7 @@ from analyst.models import Bulletin, Flow, FlowImport, IPReputation, Network, St
 from analyst.models.choices import ReputationVerdict
 from analyst.services.flows import apply_flow_filters
 
-from .params import flow_filter_params_without_ordering, int_param
+from .params import flow_filter_params_without_ordering, int_param, limit_param
 from .tops import top_conversations, top_ports_protocols, top_talkers
 
 
@@ -58,33 +58,119 @@ def _latest_malicious_ips(flows, limit: int = 10) -> list[dict]:
     ]
 
 
-def _hosts_communicating_with_malicious(flows, limit: int = 10) -> list[dict]:
-    malicious_ips = set(
-        IPReputation.objects.filter(verdict=ReputationVerdict.MALICIOUS).values_list("ip_address", flat=True)
-    )
-    if not malicious_ips:
-        return []
-    counters = Counter()
-    bytes_counter = Counter()
-    for flow in flows.filter(Q(src_ip__in=malicious_ips) | Q(dst_ip__in=malicious_ips)).iterator(chunk_size=1000):
-        if flow.src_ip in malicious_ips:
-            host = flow.dst_ip
-            malicious_peer = flow.src_ip
-        else:
-            host = flow.src_ip
-            malicious_peer = flow.dst_ip
-        key = (host, malicious_peer)
-        counters[key] += 1
-        bytes_counter[key] += flow.total_bytes or 0
-    return [
-        {
-            "host_ip": host,
-            "malicious_peer": malicious_peer,
-            "flow_count": counters[(host, malicious_peer)],
-            "total_bytes": bytes_counter[(host, malicious_peer)],
+def _malicious_communication_rankings(flows, limit: int = 10) -> dict:
+    reputations = {
+        item.ip_address: item
+        for item in IPReputation.objects.filter(verdict=ReputationVerdict.MALICIOUS)
+    }
+    if not reputations:
+        return {
+            "ips_by_volume": [],
+            "ips_by_duration": [],
+            "hosts_by_volume": [],
+            "hosts_by_duration": [],
+            "pairs_by_volume": [],
         }
-        for host, malicious_peer in sorted(counters, key=lambda key: (bytes_counter[key], counters[key]), reverse=True)[:limit]
+
+    malicious_ips = set(reputations)
+    ip_rows = {}
+    host_rows = {}
+    pair_rows = defaultdict(
+        lambda: {"flow_count": 0, "total_bytes": 0, "total_duration_seconds": 0}
+    )
+    relevant_flows = flows.filter(Q(src_ip__in=malicious_ips) | Q(dst_ip__in=malicious_ips))
+
+    for flow in relevant_flows.iterator(chunk_size=1000):
+        src_is_malicious = flow.src_ip in malicious_ips
+        dst_is_malicious = flow.dst_ip in malicious_ips
+        # Un classement hôte ↔ peer n'est fiable que si un seul côté est malveillant.
+        if src_is_malicious == dst_is_malicious:
+            continue
+        malicious_peer = flow.src_ip if src_is_malicious else flow.dst_ip
+        host_ip = flow.dst_ip if src_is_malicious else flow.src_ip
+        total_bytes = flow.total_bytes or 0
+        duration = flow.duration_seconds or 0
+
+        reputation = reputations[malicious_peer]
+        ip_row = ip_rows.setdefault(
+            malicious_peer,
+            {
+                "ip_address": malicious_peer,
+                "country": reputation.country,
+                "score": reputation.score,
+                "flow_count": 0,
+                "total_bytes": 0,
+                "total_duration_seconds": 0,
+                "host_ips": set(),
+                "last_seen_at": None,
+            },
+        )
+        ip_row["flow_count"] += 1
+        ip_row["total_bytes"] += total_bytes
+        ip_row["total_duration_seconds"] += duration
+        ip_row["host_ips"].add(host_ip)
+        if ip_row["last_seen_at"] is None or flow.started_at > ip_row["last_seen_at"]:
+            ip_row["last_seen_at"] = flow.started_at
+
+        host_row = host_rows.setdefault(
+            host_ip,
+            {
+                "host_ip": host_ip,
+                "flow_count": 0,
+                "total_bytes": 0,
+                "total_duration_seconds": 0,
+                "malicious_ips": set(),
+                "last_seen_at": None,
+            },
+        )
+        host_row["flow_count"] += 1
+        host_row["total_bytes"] += total_bytes
+        host_row["total_duration_seconds"] += duration
+        host_row["malicious_ips"].add(malicious_peer)
+        if host_row["last_seen_at"] is None or flow.started_at > host_row["last_seen_at"]:
+            host_row["last_seen_at"] = flow.started_at
+
+        pair_row = pair_rows[(host_ip, malicious_peer)]
+        pair_row["flow_count"] += 1
+        pair_row["total_bytes"] += total_bytes
+        pair_row["total_duration_seconds"] += duration
+
+    def ranked(rows, primary: str, secondary: str):
+        return sorted(
+            rows,
+            key=lambda row: (row[primary], row[secondary], row["flow_count"]),
+            reverse=True,
+        )[:limit]
+
+    def serialize_ip(row):
+        return {
+            **{key: value for key, value in row.items() if key != "host_ips"},
+            "host_count": len(row["host_ips"]),
+            "host_ips": sorted(row["host_ips"]),
+            "last_seen_at": row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
+        }
+
+    def serialize_host(row):
+        return {
+            **{key: value for key, value in row.items() if key != "malicious_ips"},
+            "malicious_peer_count": len(row["malicious_ips"]),
+            "malicious_ips": sorted(row["malicious_ips"]),
+            "last_seen_at": row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
+        }
+
+    ip_values = list(ip_rows.values())
+    host_values = list(host_rows.values())
+    pairs = [
+        {"host_ip": host, "malicious_peer": peer, **values}
+        for (host, peer), values in pair_rows.items()
     ]
+    return {
+        "ips_by_volume": [serialize_ip(row) for row in ranked(ip_values, "total_bytes", "total_duration_seconds")],
+        "ips_by_duration": [serialize_ip(row) for row in ranked(ip_values, "total_duration_seconds", "total_bytes")],
+        "hosts_by_volume": [serialize_host(row) for row in ranked(host_values, "total_bytes", "total_duration_seconds")],
+        "hosts_by_duration": [serialize_host(row) for row in ranked(host_values, "total_duration_seconds", "total_bytes")],
+        "pairs_by_volume": ranked(pairs, "total_bytes", "total_duration_seconds"),
+    }
 
 
 def build_dashboard_overview(params) -> dict:
@@ -103,6 +189,7 @@ def build_dashboard_overview(params) -> dict:
     if structure_id is not None:
         structures = structures.filter(id=structure_id)
         networks = networks.filter(structure_id=structure_id)
+    malicious_rankings = _malicious_communication_rankings(flows, limit=limit_param(params))
 
     return {
         "scope": {
@@ -126,7 +213,12 @@ def build_dashboard_overview(params) -> dict:
         "bulletins_by_severity": _count_map(bulletins, "severity"),
         "imports_by_status": _count_map(imports, "status"),
         "latest_malicious_ips": _latest_malicious_ips(flows),
-        "hosts_communicating_with_malicious": _hosts_communicating_with_malicious(flows),
+        "top_malicious_ips_by_volume": malicious_rankings["ips_by_volume"],
+        "top_malicious_ips_by_duration": malicious_rankings["ips_by_duration"],
+        "top_hosts_with_malicious_by_volume": malicious_rankings["hosts_by_volume"],
+        "top_hosts_with_malicious_by_duration": malicious_rankings["hosts_by_duration"],
+        # Ancien contrat conservé pour les clients déjà déployés.
+        "hosts_communicating_with_malicious": malicious_rankings["pairs_by_volume"],
         "top_talkers": top_talkers(params)["results"],
         "top_conversations": top_conversations(params)["results"],
         "top_ports_protocols": top_ports_protocols(params),

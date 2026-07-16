@@ -675,6 +675,7 @@ class AnalyticsDashboardTests(TestCase):
             protocol="TCP",
             service="https",
             application="HTTPS",
+            duration_seconds=600,
             total_bytes=10_000,
             total_packets=100,
         )
@@ -691,6 +692,7 @@ class AnalyticsDashboardTests(TestCase):
             protocol="TCP",
             service="ssh",
             application="SSH",
+            duration_seconds=120,
             total_bytes=30_000,
             total_packets=300,
         )
@@ -723,6 +725,58 @@ class AnalyticsDashboardTests(TestCase):
         self.assertEqual(overview["flows_by_direction"][FlowDirection.OUTBOUND], 2)
         self.assertEqual(overview["bulletins_by_severity"][BulletinSeverity.HIGH], 1)
         self.assertEqual(overview["top_talkers"][0]["ip"], "10.0.0.10")
+
+    def test_dashboard_ranks_malicious_ips_and_hosts_by_volume_and_duration(self):
+        IPReputation.objects.create(
+            ip_address="198.51.100.10",
+            verdict=ReputationVerdict.MALICIOUS,
+            score=95,
+            country="BF",
+        )
+        IPReputation.objects.create(
+            ip_address="203.0.113.20",
+            verdict=ReputationVerdict.MALICIOUS,
+            score=90,
+            country="FR",
+        )
+        Flow.objects.create(
+            network=self.network,
+            sna_flow_id="dash-c",
+            started_at="2026-06-24T10:00:00Z",
+            mapping_method=MappingMethod.ORIENTATION,
+            direction=FlowDirection.OUTBOUND,
+            src_ip="10.0.0.20",
+            src_port=50002,
+            dst_ip="203.0.113.20",
+            dst_port=22,
+            protocol="TCP",
+            service="ssh",
+            duration_seconds=60,
+            total_bytes=50_000,
+            total_packets=500,
+        )
+        other_structure = Structure.objects.create(name="Structure dashboard externe", code="DSHX")
+        other_network = Network.objects.create(structure=other_structure, name="Réseau dashboard externe")
+        Flow.objects.create(
+            network=other_network,
+            sna_flow_id="dash-outside-scope",
+            started_at="2026-06-24T11:00:00Z",
+            mapping_method=MappingMethod.ORIENTATION,
+            direction=FlowDirection.OUTBOUND,
+            src_ip="10.99.0.10",
+            dst_ip="198.51.100.10",
+            duration_seconds=10_000,
+            total_bytes=1_000_000,
+        )
+
+        overview = build_dashboard_overview({"structure_id": str(self.structure.id), "limit": "10"})
+
+        self.assertEqual(overview["top_malicious_ips_by_volume"][0]["ip_address"], "203.0.113.20")
+        self.assertEqual(overview["top_malicious_ips_by_volume"][0]["total_bytes"], 80_000)
+        self.assertEqual(overview["top_malicious_ips_by_duration"][0]["ip_address"], "198.51.100.10")
+        self.assertEqual(overview["top_malicious_ips_by_duration"][0]["total_duration_seconds"], 600)
+        self.assertEqual(overview["top_hosts_with_malicious_by_volume"][0]["host_ip"], "10.0.0.20")
+        self.assertEqual(overview["top_hosts_with_malicious_by_duration"][0]["host_ip"], "10.0.0.10")
 
 
 class IPReputationTests(TestCase):

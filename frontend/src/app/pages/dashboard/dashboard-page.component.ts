@@ -47,26 +47,62 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
 
         <section class="grid cols-2">
           <article class="card">
-            <h2>Plus longues communications</h2>
-            <p class="muted">À brancher ensuite sur un endpoint top durations dédié. Pour l’instant, utiliser le tri dans /flows.</p>
+            <h2>IP malveillantes — volume</h2>
+            @for (row of data.top_malicious_ips_by_volume; track row.ip_address) {
+              <div class="row">
+                <span>
+                  {{ row.ip_address }} <span class="muted">{{ row.country || '' }}</span><br />
+                  <small>{{ row.flow_count }} flow(s) · {{ duration(row.total_duration_seconds) }}</small>
+                </span>
+                <strong>{{ bytes(row.total_bytes) }}</strong>
+              </div>
+            } @empty {
+              <div class="empty">Aucune communication malveillante connue.</div>
+            }
           </article>
 
           <article class="card">
-            <h2>Hôtes en contact avec adresses malveillantes</h2>
-            @if ((data.hosts_communicating_with_malicious || []).length) {
-              @for (row of data.hosts_communicating_with_malicious; track row['host_ip'] + '-' + row['malicious_peer']) {
-                <div class="row">
-                  <span>{{ row['host_ip'] }} ⇄ {{ row['malicious_peer'] }}</span>
-                  <strong>{{ bytes(+row['total_bytes']!) }}</strong>
-                </div>
-              }
-            } @else {
-              <div class="network-figure">
-                <div class="node host">Hôtes internes</div>
-                <div class="links"></div>
-                <div class="node bad">Peers malveillants</div>
+            <h2>IP malveillantes — durée</h2>
+            @for (row of data.top_malicious_ips_by_duration; track row.ip_address) {
+              <div class="row">
+                <span>
+                  {{ row.ip_address }} <span class="muted">{{ row.country || '' }}</span><br />
+                  <small>{{ row.flow_count }} flow(s) · {{ bytes(row.total_bytes) }}</small>
+                </span>
+                <strong>{{ duration(row.total_duration_seconds) }}</strong>
               </div>
-              <p class="muted">Aucune communication malveillante connue pour le moment.</p>
+            } @empty {
+              <div class="empty">Aucune communication malveillante connue.</div>
+            }
+          </article>
+
+          <article class="card">
+            <h2>Hôtes exposés — volume</h2>
+            @for (row of data.top_hosts_with_malicious_by_volume; track row.host_ip) {
+              <div class="row">
+                <span>
+                  {{ row.host_ip }}<br />
+                  <small>{{ row.malicious_peer_count }} peer(s) malveillant(s) · {{ row.flow_count }} flow(s)</small>
+                </span>
+                <strong>{{ bytes(row.total_bytes) }}</strong>
+              </div>
+            } @empty {
+              <div class="empty">Aucun hôte en contact avec une IP malveillante.</div>
+            }
+          </article>
+
+          <article class="card">
+            <h2>Hôtes exposés — durée</h2>
+            @for (row of data.top_hosts_with_malicious_by_duration; track row.host_ip) {
+              <div class="row">
+                <span>
+                  {{ row.host_ip }}<br />
+                  <small>{{ row.malicious_peer_count }} peer(s) malveillant(s) · {{ bytes(row.total_bytes) }}</small>
+                </span>
+                <strong>{{ duration(row.total_duration_seconds) }}</strong>
+              </div>
+            } @empty {
+              <div class="empty">Aucun hôte en contact avec une IP malveillante.</div>
             }
           </article>
         </section>
