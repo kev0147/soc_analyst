@@ -55,7 +55,13 @@ export interface WorkerStatus {
   last_heartbeat_at: string | null;
   heartbeat_age_seconds: number | null;
   current_job_id: string | null;
+  detail?: string;
   already_running?: boolean;
+}
+
+export interface WorkerLogs {
+  line_limit: number;
+  files: Array<{ name: string; lines: string[] }>;
 }
 
 export interface Structure {
@@ -147,27 +153,15 @@ export interface MaliciousHostDashboardStat {
   last_seen_at: string | null;
 }
 
-export interface MaliciousCommunicationPeer {
-  ip_address: string;
-  country: string;
-  score: number | null;
-  ports: number[];
-  host_ports: number[];
-  services: string[];
-  flow_count: number;
-  total_bytes: number;
-  total_duration_seconds: number;
-  first_seen_at: string | null;
-  last_seen_at: string | null;
-}
-
 export interface MaliciousCommunicationRow {
   host_ip: string;
-  malicious_peer_count: number;
-  malicious_peers: MaliciousCommunicationPeer[];
-  countries: string[];
-  peer_ports: number[];
   host_ports: number[];
+  malicious_ip: string;
+  reputation_verdict: 'malicious';
+  reputation_score: number | null;
+  peer_country: string;
+  peer_ports: number[];
+  services: string[];
   flow_count: number;
   total_bytes: number;
   total_duration_seconds: number;
@@ -182,6 +176,7 @@ export interface MaliciousCommunicationAnalysis {
   totals: {
     hosts: number;
     malicious_peers: number;
+    correlations: number;
     flows: number;
     total_bytes: number;
     total_duration_seconds: number;

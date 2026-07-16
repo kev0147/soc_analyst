@@ -8,6 +8,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
+from django.db.utils import OperationalError
 from django.utils import timezone
 
 from analyst.models import Flow, FlowImport, FlowImportItem, Network, Structure
@@ -255,6 +256,10 @@ def confirm_flow_import(flow_import: FlowImport, progress_callback=None) -> Flow
             started_at = flow.started_at
             period_start = started_at if period_start is None or started_at < period_start else period_start
             period_end = started_at if period_end is None or started_at > period_end else period_end
+        except OperationalError:
+            # Un verrou SQLite est transitoire et doit être repris au niveau du job,
+            # pas transformé en rejet métier de la ligne CSV.
+            raise
         except Exception as exc:
             rejected.append({
                 "row_number": row_number,

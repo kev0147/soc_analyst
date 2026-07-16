@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from django.core.management import call_command, CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.utils import OperationalError
 from django.test import RequestFactory, TestCase, override_settings
 
 from django.utils import timezone
@@ -459,6 +460,23 @@ class BackgroundJobTests(TestCase):
         self.assertEqual(job.progress_percent, 100)
         self.assertEqual(result["candidate_count"], 0)
 
+    def test_database_lock_is_retried_before_job_failure(self):
+        job = BackgroundJob.objects.create(
+            kind=BackgroundJobKind.IP_REPUTATION,
+            created_by=self.user,
+            payload={"scope": "all_flows"},
+        )
+        with override_settings(SQLITE_LOCK_RETRY_ATTEMPTS=2, SQLITE_LOCK_RETRY_BASE_SECONDS=0.01), patch(
+            "analyst.services.jobs.tasks._run_recoverable",
+            side_effect=[OperationalError("database is locked"), {"candidate_count": 0}],
+        ) as mocked_run:
+            result = execute_background_job(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(mocked_run.call_count, 2)
+        self.assertEqual(job.status, BackgroundJobStatus.COMPLETED)
+        self.assertEqual(result["candidate_count"], 0)
+
 
 class BackgroundJobApiTests(TestCase):
     def setUp(self):
@@ -616,6 +634,39 @@ class WorkerApiTests(TestCase):
         self.assertEqual(running["status"], "running")
         self.assertEqual(running["state"], "idle")
         self.assertEqual(stopped["status"], "stopped")
+
+    @patch("analyst.controllers.worker.logs.worker_log_tail")
+    def test_only_admin_can_read_worker_logs(self, mocked_logs):
+        mocked_logs.return_value = {"line_limit": 100, "files": [{"name": "worker.err.log", "lines": ["test"]}]}
+        self.client.force_login(self.viewer)
+        forbidden = self.client.get("/api/v1/workers/logs/")
+        self.client.force_login(self.admin)
+        accepted = self.client.get("/api/v1/workers/logs/")
+
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(accepted.json()["files"][0]["lines"], ["test"])
+
+    @patch("analyst.controllers.worker.start.start_background_worker")
+    def test_worker_start_returns_explicit_operating_system_error(self, mocked_start):
+        mocked_start.side_effect = OSError("accès refusé")
+        self.client.force_login(self.admin)
+
+        response = self.client.post("/api/v1/workers/start/", {}, content_type="application/json")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("accès refusé", response.json()["detail"])
+
+    def test_missing_heartbeat_falls_back_to_worker_lock(self):
+        missing_path = TEST_MEDIA_ROOT / "missing-worker-status.json"
+        with patch("analyst.services.jobs.supervisor._status_path", return_value=missing_path), patch(
+            "analyst.services.jobs.supervisor._worker_lock_is_held", return_value=True
+        ):
+            status = worker_status()
+
+        self.assertEqual(status["status"], "running")
+        self.assertEqual(status["state"], "idle")
+        self.assertIn("verrou local", status["detail"])
 
 
 class IPAnalysisRecordsApiTests(TestCase):
@@ -975,14 +1026,18 @@ class MaliciousCommunicationsAnalysisTests(TestCase):
             "ordering": "-total_bytes",
         })
 
-        self.assertEqual(result["count"], 2)
+        self.assertEqual(result["count"], 3)
+        self.assertEqual(result["totals"]["hosts"], 2)
+        self.assertEqual(result["totals"]["correlations"], 3)
         self.assertEqual(result["totals"]["total_bytes"], 35_000)
         first = result["results"][0]
         self.assertEqual(first["host_ip"], "10.0.0.10")
-        self.assertEqual(first["total_duration_seconds"], 300)
-        self.assertEqual(first["peer_ports"], [443, 44444])
-        self.assertEqual(first["countries"], ["CA", "FR"])
-        self.assertEqual({peer["ip_address"] for peer in first["malicious_peers"]}, {"198.51.100.10", "203.0.113.20"})
+        self.assertEqual(first["host_ports"], [22])
+        self.assertEqual(first["malicious_ip"], "203.0.113.20")
+        self.assertEqual(first["reputation_verdict"], ReputationVerdict.MALICIOUS)
+        self.assertEqual(first["reputation_score"], 80)
+        self.assertEqual(first["peer_country"], "CA")
+        self.assertEqual(first["total_duration_seconds"], 200)
 
     def test_import_and_date_scopes_and_peer_filters(self):
         flow_import = FlowImport.objects.create(
@@ -1002,7 +1057,7 @@ class MaliciousCommunicationsAnalysisTests(TestCase):
             "date_from": "2026-07-02T00:00:00Z",
             "date_to": "2026-07-02T23:59:59Z",
             "country": "CA",
-            "peer_port": "44444",
+            "host_port": "22",
         })
 
         self.assertEqual(imported["totals"]["flows"], 2)

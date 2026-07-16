@@ -1,6 +1,5 @@
-import { Component, inject } from '@angular/core';
+import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { AuthService } from '../../core/auth/auth.service';
 import { SidebarComponent } from '../sidebar/sidebar.component';
 import { TopbarComponent } from '../topbar/topbar.component';
 
@@ -12,7 +11,7 @@ import { TopbarComponent } from '../topbar/topbar.component';
     <div class="shell">
       <app-sidebar />
       <div class="main">
-        <app-topbar [user]="auth.user()" />
+        <app-topbar />
         <section class="content">
           <router-outlet />
         </section>
@@ -38,6 +37,4 @@ import { TopbarComponent } from '../topbar/topbar.component';
     }
   `,
 })
-export class AppLayoutComponent {
-  readonly auth = inject(AuthService);
-}
+export class AppLayoutComponent {}

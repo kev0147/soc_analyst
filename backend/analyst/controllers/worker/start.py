@@ -11,7 +11,13 @@ class WorkerStartController(APIView):
     permission_classes = (IsAdmin,)
 
     def post(self, request):
-        result = start_background_worker()
+        try:
+            result = start_background_worker()
+        except OSError as exc:
+            return Response(
+                {"detail": f"Le processus worker n'a pas pu démarrer : {exc}"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         record_audit(request, "BACKGROUND_WORKER_START_REQUESTED", details=result)
         return Response(
             result,

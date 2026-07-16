@@ -8,6 +8,7 @@ from analyst.controllers.background_job.retrieve import BackgroundJobRetrieveCon
 from analyst.controllers.background_job.retry import BackgroundJobRetryController
 from analyst.controllers.worker.status import WorkerStatusController
 from analyst.controllers.worker.start import WorkerStartController
+from analyst.controllers.worker.logs import WorkerLogsController
 from analyst.controllers.bulletin.restore import BulletinRestoreController
 from analyst.controllers.password_reset_token.consume import PasswordResetTokenConsumeController
 from analyst.controllers.user.list import UserListController
@@ -138,6 +139,7 @@ urlpatterns = [
     path("background-jobs/<uuid:pk>/retry/", BackgroundJobRetryController.as_view(), name="background_job-retry"),
     path("workers/status/", WorkerStatusController.as_view(), name="worker-status"),
     path("workers/start/", WorkerStartController.as_view(), name="worker-start"),
+    path("workers/logs/", WorkerLogsController.as_view(), name="worker-logs"),
     path("auth/login/", LoginController.as_view(), name="login"),
     path("auth/logout/", LogoutController.as_view(), name="logout"),
     path("auth/me/", CurrentUserController.as_view(), name="current-user"),

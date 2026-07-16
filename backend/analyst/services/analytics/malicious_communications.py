@@ -8,10 +8,11 @@ from analyst.services.flows import apply_flow_filters
 
 ALLOWED_ORDERING = {
     "host_ip",
+    "malicious_ip",
+    "reputation_score",
     "total_bytes",
     "total_duration_seconds",
     "flow_count",
-    "malicious_peer_count",
     "last_seen_at",
 }
 
@@ -64,9 +65,9 @@ def malicious_communications(params) -> dict:
     if ordering_field not in ALLOWED_ORDERING:
         raise ValidationError({"ordering": "Tri non autorisé."})
 
-    peer_port_filter = _integer(params, "peer_port", minimum=0)
-    if peer_port_filter is not None and peer_port_filter > 65535:
-        raise ValidationError({"peer_port": "Le port doit être compris entre 0 et 65535."})
+    host_port_filter = _integer(params, "host_port", minimum=0)
+    if host_port_filter is not None and host_port_filter > 65535:
+        raise ValidationError({"host_port": "Le port doit être compris entre 0 et 65535."})
     min_total_bytes = _integer(params, "min_total_bytes", minimum=0)
     min_duration = _integer(params, "min_total_duration_seconds", minimum=0)
     host_filter = (params.get("host_ip") or "").strip()
@@ -89,8 +90,8 @@ def malicious_communications(params) -> dict:
 
         peer_ip = flow.src_ip if src_is_malicious else flow.dst_ip
         host_ip = flow.dst_ip if src_is_malicious else flow.src_ip
-        peer_port = flow.src_port if src_is_malicious else flow.dst_port
         host_port = flow.dst_port if src_is_malicious else flow.src_port
+        peer_port = flow.src_port if src_is_malicious else flow.dst_port
         reputation = reputations[peer_ip]
         country = reputation.country.upper()
 
@@ -100,24 +101,27 @@ def malicious_communications(params) -> dict:
             continue
         if country_filter and country != country_filter:
             continue
-        if peer_port_filter is not None and peer_port != peer_port_filter:
+        if host_port_filter is not None and host_port != host_port_filter:
             continue
 
         total_bytes = flow.total_bytes or 0
         duration = flow.duration_seconds or 0
         row = rows.setdefault(
-            host_ip,
+            (host_ip, peer_ip),
             {
                 "host_ip": host_ip,
+                "host_ports": set(),
+                "malicious_ip": peer_ip,
+                "reputation_verdict": reputation.verdict,
+                "reputation_score": reputation.score,
+                "peer_country": reputation.country,
+                "peer_ports": set(),
+                "services": set(),
                 "flow_count": 0,
                 "total_bytes": 0,
                 "total_duration_seconds": 0,
                 "first_seen_at": None,
                 "last_seen_at": None,
-                "peer_ports": set(),
-                "host_ports": set(),
-                "countries": set(),
-                "peers": {},
             },
         )
         row["flow_count"] += 1
@@ -127,42 +131,12 @@ def malicious_communications(params) -> dict:
             row["peer_ports"].add(peer_port)
         if host_port is not None:
             row["host_ports"].add(host_port)
-        if country:
-            row["countries"].add(country)
+        if flow.service:
+            row["services"].add(flow.service)
         if row["first_seen_at"] is None or flow.started_at < row["first_seen_at"]:
             row["first_seen_at"] = flow.started_at
         if row["last_seen_at"] is None or flow.started_at > row["last_seen_at"]:
             row["last_seen_at"] = flow.started_at
-
-        peer = row["peers"].setdefault(
-            peer_ip,
-            {
-                "ip_address": peer_ip,
-                "country": reputation.country,
-                "score": reputation.score,
-                "ports": set(),
-                "host_ports": set(),
-                "services": set(),
-                "flow_count": 0,
-                "total_bytes": 0,
-                "total_duration_seconds": 0,
-                "first_seen_at": None,
-                "last_seen_at": None,
-            },
-        )
-        peer["flow_count"] += 1
-        peer["total_bytes"] += total_bytes
-        peer["total_duration_seconds"] += duration
-        if peer_port is not None:
-            peer["ports"].add(peer_port)
-        if host_port is not None:
-            peer["host_ports"].add(host_port)
-        if flow.service:
-            peer["services"].add(flow.service)
-        if peer["first_seen_at"] is None or flow.started_at < peer["first_seen_at"]:
-            peer["first_seen_at"] = flow.started_at
-        if peer["last_seen_at"] is None or flow.started_at > peer["last_seen_at"]:
-            peer["last_seen_at"] = flow.started_at
 
     results = []
     for row in rows.values():
@@ -170,39 +144,27 @@ def malicious_communications(params) -> dict:
             continue
         if min_duration is not None and row["total_duration_seconds"] < min_duration:
             continue
-        peers = []
-        for peer in row["peers"].values():
-            peers.append({
-                **{key: value for key, value in peer.items() if key not in {"ports", "host_ports", "services"}},
-                "ports": sorted(peer["ports"]),
-                "host_ports": sorted(peer["host_ports"]),
-                "services": sorted(peer["services"]),
-                "first_seen_at": peer["first_seen_at"].isoformat() if peer["first_seen_at"] else None,
-                "last_seen_at": peer["last_seen_at"].isoformat() if peer["last_seen_at"] else None,
-            })
-        peers.sort(key=lambda item: (item["total_bytes"], item["total_duration_seconds"]), reverse=True)
         results.append({
-            "host_ip": row["host_ip"],
-            "malicious_peer_count": len(peers),
-            "malicious_peers": peers,
-            "countries": sorted(row["countries"]),
-            "peer_ports": sorted(row["peer_ports"]),
+            **{key: value for key, value in row.items() if key not in {"host_ports", "peer_ports", "services"}},
             "host_ports": sorted(row["host_ports"]),
-            "flow_count": row["flow_count"],
-            "total_bytes": row["total_bytes"],
-            "total_duration_seconds": row["total_duration_seconds"],
+            "peer_ports": sorted(row["peer_ports"]),
+            "services": sorted(row["services"]),
             "first_seen_at": row["first_seen_at"].isoformat() if row["first_seen_at"] else None,
             "last_seen_at": row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
         })
 
-    results.sort(key=lambda row: row[ordering_field], reverse=descending)
+    results.sort(
+        key=lambda row: row[ordering_field] if row[ordering_field] is not None else -1,
+        reverse=descending,
+    )
     return {
         "scope": scope,
         "ordering": ordering,
         "count": len(results),
         "totals": {
-            "hosts": len(results),
-            "malicious_peers": len({peer["ip_address"] for row in results for peer in row["malicious_peers"]}),
+            "hosts": len({row["host_ip"] for row in results}),
+            "malicious_peers": len({row["malicious_ip"] for row in results}),
+            "correlations": len(results),
             "flows": sum(row["flow_count"] for row in results),
             "total_bytes": sum(row["total_bytes"] for row in results),
             "total_duration_seconds": sum(row["total_duration_seconds"] for row in results),

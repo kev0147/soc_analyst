@@ -1,6 +1,9 @@
 import os
+import time
 
-from django.db import transaction
+from django.conf import settings
+from django.db import close_old_connections, transaction
+from django.db.utils import OperationalError
 from django.utils import timezone
 
 from analyst.models import AuditEvent, BackgroundJob, FlowImport
@@ -41,8 +44,33 @@ def _claim(job_id: str) -> BackgroundJob | None:
             "attempt_count",
             "updated_at",
         ))
-    _audit(job, "BACKGROUND_JOB_STARTED")
+        _audit(job, "BACKGROUND_JOB_STARTED")
     return job
+
+
+def _is_database_locked(exc: OperationalError) -> bool:
+    return "database is locked" in str(exc).lower() or "database table is locked" in str(exc).lower()
+
+
+def _with_lock_retries(operation, *, job_id: str | None = None):
+    attempts = settings.SQLITE_LOCK_RETRY_ATTEMPTS
+    base_delay = settings.SQLITE_LOCK_RETRY_BASE_SECONDS
+    for attempt in range(1, attempts + 1):
+        try:
+            return operation()
+        except OperationalError as exc:
+            if not _is_database_locked(exc) or attempt >= attempts:
+                raise
+            delay = base_delay * (2 ** (attempt - 1))
+            close_old_connections()
+            time.sleep(delay)
+            if job_id:
+                try:
+                    BackgroundJob.objects.filter(pk=job_id).update(
+                        status_message=f"Base SQLite occupée — reprise {attempt + 1}/{attempts}"
+                    )
+                except OperationalError:
+                    close_old_connections()
 
 
 def _progress(job_id: str, current: int, total: int | None = None, message: str = ""):
@@ -91,46 +119,63 @@ def _run(job: BackgroundJob) -> dict:
     raise ValueError(f"Type de job non pris en charge : {job.kind}.")
 
 
+def _run_recoverable(job: BackgroundJob) -> dict:
+    if job.kind == BackgroundJobKind.FLOW_IMPORT and job.flow_import_id:
+        # Un premier passage peut avoir inséré une partie des flows avant le verrou.
+        # L'import est idempotent : on le remet en attente et on reprend le CSV.
+        FlowImport.objects.filter(
+            pk=job.flow_import_id,
+            status=ImportStatus.PROCESSING,
+        ).update(status=ImportStatus.PENDING, error_message="")
+    return _run(job)
+
+
 def _fail(job: BackgroundJob, exc: Exception):
     message = str(exc)[:4000] or exc.__class__.__name__
     completed_at = timezone.now()
-    BackgroundJob.objects.filter(pk=job.pk).update(
-        status=BackgroundJobStatus.FAILED,
-        error_message=message,
-        status_message="Échec",
-        completed_at=completed_at,
-    )
-    if job.kind == BackgroundJobKind.FLOW_IMPORT and job.flow_import_id:
-        FlowImport.objects.filter(pk=job.flow_import_id).update(
-            status=ImportStatus.FAILED,
+    with transaction.atomic():
+        BackgroundJob.objects.filter(pk=job.pk).update(
+            status=BackgroundJobStatus.FAILED,
             error_message=message,
+            status_message="Échec",
             completed_at=completed_at,
         )
+        if job.kind == BackgroundJobKind.FLOW_IMPORT and job.flow_import_id:
+            FlowImport.objects.filter(pk=job.flow_import_id).update(
+                status=ImportStatus.FAILED,
+                error_message=message,
+                completed_at=completed_at,
+            )
+        _audit(job, "BACKGROUND_JOB_FAILED", {"error": message})
     job.refresh_from_db()
-    _audit(job, "BACKGROUND_JOB_FAILED", {"error": message})
+
+
+def _complete(job: BackgroundJob, result: dict):
+    completed_at = timezone.now()
+    with transaction.atomic():
+        BackgroundJob.objects.filter(pk=job.pk).update(
+            status=BackgroundJobStatus.COMPLETED,
+            result=result,
+            error_message="",
+            status_message="Terminé",
+            progress_current=models_progress_total(job.pk),
+            completed_at=completed_at,
+        )
+        _audit(job, "BACKGROUND_JOB_COMPLETED", {"result": result})
+    job.refresh_from_db()
 
 
 def execute_background_job(job_id: str) -> dict | None:
-    job = _claim(job_id)
+    job = _with_lock_retries(lambda: _claim(job_id), job_id=job_id)
     if job is None:
         return None
     try:
-        result = _run(job)
+        result = _with_lock_retries(lambda: _run_recoverable(job), job_id=job_id)
     except Exception as exc:
-        _fail(job, exc)
+        _with_lock_retries(lambda: _fail(job, exc), job_id=job_id)
         raise
 
-    completed_at = timezone.now()
-    BackgroundJob.objects.filter(pk=job.pk).update(
-        status=BackgroundJobStatus.COMPLETED,
-        result=result,
-        error_message="",
-        status_message="Terminé",
-        progress_current=models_progress_total(job.pk),
-        completed_at=completed_at,
-    )
-    job.refresh_from_db()
-    _audit(job, "BACKGROUND_JOB_COMPLETED", {"result": result})
+    _with_lock_retries(lambda: _complete(job, result), job_id=job_id)
     return result
 
 
@@ -141,7 +186,10 @@ def fail_interrupted_jobs() -> int:
         )
     )
     for job in jobs:
-        _fail(job, RuntimeError("Le worker précédent a été interrompu pendant ce traitement."))
+        _with_lock_retries(
+            lambda job=job: _fail(job, RuntimeError("Le worker précédent a été interrompu pendant ce traitement.")),
+            job_id=str(job.id),
+        )
     return len(jobs)
 
 

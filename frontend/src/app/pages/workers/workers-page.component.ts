@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
-import { BackgroundJob, WorkerStatus } from '../../core/api/api.types';
+import { BackgroundJob, WorkerLogs, WorkerStatus } from '../../core/api/api.types';
 
 @Component({
   selector: 'app-workers-page',
@@ -28,8 +28,12 @@ import { BackgroundJob, WorkerStatus } from '../../core/api/api.types';
             <div><span class="muted">Heartbeat</span><p>{{ item.last_heartbeat_at ? (item.last_heartbeat_at | date:'medium') : '-' }}</p></div>
             <div><span class="muted">Job courant</span><p>{{ item.current_job_id || '-' }}</p></div>
           </div>
+          @if (item.detail) { <p class="muted">{{ item.detail }}</p> }
           @if (isAdmin()) {
             <button class="btn" (click)="start()" [disabled]="item.status === 'running'">Démarrer le worker</button>
+          }
+          @if (item.status === 'offline') {
+            <p class="muted">Si un ancien worker a été lancé avant la mise à jour, arrête-le d’abord : il peut conserver le verrou sans produire de heartbeat.</p>
           }
         } @else {
           <div class="empty">Chargement du statut...</div>
@@ -37,6 +41,23 @@ import { BackgroundJob, WorkerStatus } from '../../core/api/api.types';
         <p class="muted">Le mode SQLite accepte un seul worker pour éviter les écritures concurrentes.</p>
         @if (message()) { <p class="muted">{{ message() }}</p> }
       </section>
+
+      @if (isAdmin()) {
+        <section class="card">
+          <div class="page-title">
+            <div><h2>Diagnostic du worker</h2><p>Dernières lignes écrites par les différents modes de lancement.</p></div>
+            <button class="btn secondary" (click)="loadLogs()">Actualiser les logs</button>
+          </div>
+          @if (logs(); as output) {
+            @for (file of output.files; track file.name) {
+              <h3>{{ file.name }}</h3>
+              <pre>{{ file.lines.join('\n') || 'Fichier vide.' }}</pre>
+            } @empty {
+              <div class="empty">Aucun journal worker. Le worker n’a probablement jamais démarré depuis cette installation.</div>
+            }
+          }
+        </section>
+      }
 
       <section class="card">
         <div class="page-title">
@@ -75,17 +96,24 @@ import { BackgroundJob, WorkerStatus } from '../../core/api/api.types';
       </section>
     </div>
   `,
+  styles: `
+    pre { max-height: 280px; overflow: auto; padding: 14px; border-radius: 12px; background: #071018; color: var(--muted); white-space: pre-wrap; }
+  `,
 })
 export class WorkersPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   readonly worker = signal<WorkerStatus | null>(null);
   readonly jobs = signal<BackgroundJob[]>([]);
+  readonly logs = signal<WorkerLogs | null>(null);
   readonly message = signal('');
   jobStatus = '';
   private timer: ReturnType<typeof setTimeout> | null = null;
 
-  ngOnInit() { this.load(); }
+  ngOnInit() {
+    this.load();
+    if (this.isAdmin()) this.loadLogs();
+  }
 
   isAdmin() { return this.auth.user()?.role === 'admin'; }
 
@@ -111,7 +139,7 @@ export class WorkersPageComponent implements OnInit, OnDestroy {
         this.message.set(status.already_running ? 'Le worker est déjà actif.' : 'Worker en cours de démarrage.');
         setTimeout(() => this.load(), 1000);
       },
-      error: () => this.message.set('Impossible de démarrer le worker.'),
+      error: (error) => this.message.set(error?.error?.detail || 'Impossible de démarrer le worker.'),
     });
   }
 
@@ -122,6 +150,13 @@ export class WorkersPageComponent implements OnInit, OnDestroy {
         this.loadJobs();
       },
       error: () => this.message.set('Relance impossible.'),
+    });
+  }
+
+  loadLogs() {
+    this.api.workerLogs().subscribe({
+      next: (logs) => this.logs.set(logs),
+      error: () => this.message.set('Impossible de lire les logs du worker.'),
     });
   }
 

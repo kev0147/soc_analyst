@@ -100,8 +100,9 @@ DATABASES = {
         # Un import asynchrone peut écrire pendant qu'une requête HTTP lit la BD.
         # SQLite attend ce délai avant de conclure que la base est verrouillée.
         'OPTIONS': {
-            'timeout': max(float(os.getenv('SQLITE_TIMEOUT_SECONDS', '30')), 1.0),
+            'timeout': max(float(os.getenv('SQLITE_TIMEOUT_SECONDS', '60')), 1.0),
             'transaction_mode': 'IMMEDIATE',
+            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;',
         },
     }
 }
@@ -190,3 +191,5 @@ IP_REPUTATION_ERROR_RETRY_HOURS = max(int(os.getenv("IP_REPUTATION_ERROR_RETRY_H
 BACKGROUND_JOBS_POLL_SECONDS = max(float(os.getenv("BACKGROUND_JOBS_POLL_SECONDS", "1")), 0.1)
 WORKER_HEARTBEAT_SECONDS = max(float(os.getenv("WORKER_HEARTBEAT_SECONDS", "5")), 1.0)
 WORKER_STALE_SECONDS = max(float(os.getenv("WORKER_STALE_SECONDS", "20")), WORKER_HEARTBEAT_SECONDS * 2)
+SQLITE_LOCK_RETRY_ATTEMPTS = max(int(os.getenv("SQLITE_LOCK_RETRY_ATTEMPTS", "3")), 1)
+SQLITE_LOCK_RETRY_BASE_SECONDS = max(float(os.getenv("SQLITE_LOCK_RETRY_BASE_SECONDS", "1")), 0.1)

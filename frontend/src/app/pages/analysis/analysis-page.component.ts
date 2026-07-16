@@ -74,8 +74,8 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
           <input class="input" [(ngModel)]="country" maxlength="2" placeholder="BF, FR..." />
         </label>
         <label class="field">
-          <span>Port du peer</span>
-          <input class="input" type="number" [(ngModel)]="peerPort" />
+          <span>Port de l’hôte</span>
+          <input class="input" type="number" [(ngModel)]="hostPort" />
         </label>
         <label class="field">
           <span>Trafic minimum (octets)</span>
@@ -91,7 +91,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
             <option value="-total_bytes">Plus gros trafic</option>
             <option value="-total_duration_seconds">Plus longue durée</option>
             <option value="-flow_count">Plus grand nombre de flows</option>
-            <option value="-malicious_peer_count">Plus grand nombre de peers</option>
+            <option value="-reputation_score">Score de réputation</option>
             <option value="-last_seen_at">Plus récemment observés</option>
             <option value="host_ip">IP hôte croissante</option>
           </select>
@@ -107,6 +107,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
         <section class="grid cols-3">
           <article class="card metric"><span>Hôtes</span><strong>{{ data.totals.hosts }}</strong></article>
           <article class="card metric"><span>IP malveillantes</span><strong>{{ data.totals.malicious_peers }}</strong></article>
+          <article class="card metric"><span>Corrélations hôte / peer</span><strong>{{ data.totals.correlations }}</strong></article>
           <article class="card metric"><span>Flows corrélés</span><strong>{{ data.totals.flows }}</strong></article>
           <article class="card metric"><span>Trafic cumulé</span><strong>{{ bytes(data.totals.total_bytes) }}</strong></article>
           <article class="card metric"><span>Durée cumulée</span><strong>{{ duration(data.totals.total_duration_seconds) }}</strong></article>
@@ -118,9 +119,10 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
               <thead>
                 <tr>
                   <th>Hôte</th>
-                  <th>IP malveillantes corrélées</th>
-                  <th>Pays</th>
-                  <th>Ports peers</th>
+                  <th>Ports hôte ciblés/observés</th>
+                  <th>IP malveillante</th>
+                  <th>Réputation</th>
+                  <th>Pays du peer</th>
                   <th>Flows</th>
                   <th>Trafic cumulé</th>
                   <th>Durée cumulée</th>
@@ -128,26 +130,20 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                 </tr>
               </thead>
               <tbody>
-                @for (row of data.results; track row.host_ip) {
+                @for (row of data.results; track row.host_ip + '-' + row.malicious_ip) {
                   <tr>
                     <td>{{ row.host_ip }}</td>
-                    <td>
-                      @for (peer of row.malicious_peers; track peer.ip_address) {
-                        <div class="peer">
-                          <strong>{{ peer.ip_address }}</strong>
-                          <span class="muted">{{ peer.country || '-' }} · score {{ peer.score ?? '-' }} · ports {{ peer.ports.join(', ') || '-' }}</span>
-                        </div>
-                      }
-                    </td>
-                    <td>{{ row.countries.join(', ') || '-' }}</td>
-                    <td>{{ row.peer_ports.join(', ') || '-' }}</td>
+                    <td>{{ row.host_ports.join(', ') || '-' }}</td>
+                    <td>{{ row.malicious_ip }}</td>
+                    <td><span class="badge danger">{{ row.reputation_verdict }} · {{ row.reputation_score ?? '-' }}</span></td>
+                    <td>{{ row.peer_country || '-' }}</td>
                     <td>{{ row.flow_count }}</td>
                     <td>{{ bytes(row.total_bytes) }}</td>
                     <td>{{ duration(row.total_duration_seconds) }}</td>
                     <td>{{ row.last_seen_at ? (row.last_seen_at | date:'medium') : '-' }}</td>
                   </tr>
                 } @empty {
-                  <tr><td colspan="8"><div class="empty">Aucune communication avec une IP malveillante dans ce périmètre.</div></td></tr>
+                  <tr><td colspan="9"><div class="empty">Aucune communication avec une IP malveillante dans ce périmètre.</div></td></tr>
                 }
               </tbody>
             </table>
@@ -159,7 +155,6 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
   styles: `
     .metric span { color: var(--muted); }
     .metric strong { display: block; margin-top: 8px; font-size: 28px; }
-    .peer { display: grid; gap: 2px; margin-bottom: 8px; }
   `,
 })
 export class AnalysisPageComponent implements OnInit {
@@ -179,7 +174,7 @@ export class AnalysisPageComponent implements OnInit {
   hostIp = '';
   peerIp = '';
   country = '';
-  peerPort: number | null = null;
+  hostPort: number | null = null;
   minBytes: number | null = null;
   minDuration: number | null = null;
   ordering = '-total_bytes';
@@ -202,7 +197,7 @@ export class AnalysisPageComponent implements OnInit {
       host_ip: this.hostIp,
       peer_ip: this.peerIp,
       country: this.country,
-      peer_port: this.peerPort,
+      host_port: this.hostPort,
       min_total_bytes: this.minBytes,
       min_total_duration_seconds: this.minDuration,
     };
@@ -217,7 +212,7 @@ export class AnalysisPageComponent implements OnInit {
     this.api.maliciousCommunications(params).subscribe({
       next: (result) => {
         this.analysis.set(result);
-        this.message.set(`${result.count} hôte(s) corrélé(s).`);
+        this.message.set(`${result.count} corrélation(s) hôte / IP malveillante.`);
       },
       error: (error) => {
         const detail = error?.error;

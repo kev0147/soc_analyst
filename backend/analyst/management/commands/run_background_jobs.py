@@ -75,7 +75,10 @@ class Command(BaseCommand):
         poll_seconds = max(options["poll_seconds"], 0.1)
         lock_path = Path(settings.BASE_DIR) / ".background_jobs.lock"
 
-        with WorkerLock(lock_path), WorkerHeartbeat() as heartbeat:
+        heartbeat_monitor = WorkerHeartbeat(
+            error_callback=lambda message: self.stderr.write(self.style.WARNING(message))
+        )
+        with WorkerLock(lock_path), heartbeat_monitor as heartbeat:
             recovered = fail_interrupted_jobs()
             if recovered:
                 self.stdout.write(self.style.WARNING(f"{recovered} job(s) interrompu(s) marqué(s) en échec."))

@@ -19,6 +19,7 @@ import {
   TopPeer,
   User,
   WorkerStatus,
+  WorkerLogs,
 } from './api.types';
 
 export type QueryParams = Record<string, string | number | boolean | null | undefined>;
@@ -174,6 +175,12 @@ export class ApiService {
 
   startWorker(): Observable<WorkerStatus> {
     return this.http.post<WorkerStatus>(`${this.baseUrl}/workers/start/`, {});
+  }
+
+  workerLogs(lines = 100): Observable<WorkerLogs> {
+    return this.http.get<WorkerLogs>(`${this.baseUrl}/workers/logs/`, {
+      params: this.params({ lines }),
+    });
   }
 
   private params(values: QueryParams): HttpParams {
