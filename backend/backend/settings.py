@@ -97,6 +97,12 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # Un import asynchrone peut écrire pendant qu'une requête HTTP lit la BD.
+        # SQLite attend ce délai avant de conclure que la base est verrouillée.
+        'OPTIONS': {
+            'timeout': max(float(os.getenv('SQLITE_TIMEOUT_SECONDS', '30')), 1.0),
+            'transaction_mode': 'IMMEDIATE',
+        },
     }
 }
 
@@ -153,9 +159,10 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 25,
 }
 
-# Huit heures d'inactivité : chaque requête authentifiée repousse l'expiration.
+# Session fixe de huit heures. Ne pas la sauvegarder à chaque requête : le polling
+# des jobs doit rester en lecture seule et ne pas concurrencer le worker SQLite.
 SESSION_COOKIE_AGE = 8 * 60 * 60
-SESSION_SAVE_EVERY_REQUEST = True
+SESSION_SAVE_EVERY_REQUEST = False
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'

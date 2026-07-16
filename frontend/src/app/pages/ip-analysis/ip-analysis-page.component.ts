@@ -170,7 +170,7 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
         },
         error: () => this.message.set('Impossible de suivre le job.'),
       });
-    }, 1500);
+    }, 3000);
   }
 
   ngOnDestroy() {

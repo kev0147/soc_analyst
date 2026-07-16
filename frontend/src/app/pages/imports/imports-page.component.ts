@@ -184,7 +184,7 @@ export class ImportsPageComponent implements OnInit, OnDestroy {
           if (job.status === 'queued' || job.status === 'running') this.poll(job.id);
         },
       });
-    }, 1500);
+    }, 3000);
   }
 
   ngOnDestroy() {
