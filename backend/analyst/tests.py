@@ -507,6 +507,61 @@ class BackgroundJobApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class IPAnalysisRecordsApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="ip-records@example.com",
+            password="a-long-test-password",
+            role=UserRole.VIEWER,
+        )
+        self.structure = Structure.objects.create(name="Structure IP A", code="IPA")
+        self.other_structure = Structure.objects.create(name="Structure IP B", code="IPB")
+        self.network = Network.objects.create(structure=self.structure, name="Réseau IP A")
+        self.other_network = Network.objects.create(structure=self.other_structure, name="Réseau IP B")
+        self.reputation = IPReputation.objects.create(
+            ip_address="198.51.100.10",
+            verdict=ReputationVerdict.MALICIOUS,
+            score=95,
+        )
+        self.other_reputation = IPReputation.objects.create(
+            ip_address="203.0.113.10",
+            verdict=ReputationVerdict.MALICIOUS,
+            score=90,
+        )
+        PeerObservation.objects.create(
+            peer_reputation=self.reputation,
+            network=self.network,
+            host_ip="10.0.0.10",
+        )
+        PeerObservation.objects.create(
+            peer_reputation=self.reputation,
+            network=self.network,
+            host_ip="10.0.0.11",
+        )
+        PeerObservation.objects.create(
+            peer_reputation=self.other_reputation,
+            network=self.other_network,
+            host_ip="10.1.0.10",
+        )
+        self.client.force_login(self.user)
+
+    def test_records_can_be_filtered_by_structure_without_duplicates(self):
+        response = self.client.get(
+            "/api/v1/ip-analysis/records/",
+            {"structure_id": self.structure.id, "verdict": ReputationVerdict.MALICIOUS},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 1)
+        self.assertEqual(response.json()["results"][0]["ip_address"], self.reputation.ip_address)
+
+    def test_records_reject_invalid_structure_id(self):
+        response = self.client.get("/api/v1/ip-analysis/records/", {"structure_id": "abc"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("structure_id", response.json())
+
+
 class FlowExplorationTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -515,8 +570,13 @@ class FlowExplorationTests(TestCase):
             role=UserRole.VIEWER,
         )
         self.structure = Structure.objects.create(name="Structure exploration", code="EXP")
+        self.external_structure = Structure.objects.create(name="Autre structure", code="OTHER")
         self.network = Network.objects.create(structure=self.structure, name="Réseau exploration")
         self.other_network = Network.objects.create(structure=self.structure, name="Autre réseau")
+        self.external_network = Network.objects.create(
+            structure=self.external_structure,
+            name="Réseau autre structure",
+        )
         self.flow_a = Flow.objects.create(
             network=self.network,
             sna_flow_id="flow-a",
@@ -547,6 +607,29 @@ class FlowExplorationTests(TestCase):
             application="SSH",
             total_bytes=500,
         )
+        self.flow_c = Flow.objects.create(
+            network=self.external_network,
+            sna_flow_id="flow-c",
+            started_at="2026-06-24T10:00:00Z",
+            mapping_method=MappingMethod.ORIENTATION,
+            direction=FlowDirection.OUTBOUND,
+            src_ip="10.20.1.10",
+            src_port=53000,
+            dst_ip="192.0.2.53",
+            dst_port=53,
+            protocol="UDP",
+            service="dns",
+            application="DNS",
+            total_bytes=250,
+        )
+
+    def test_apply_flow_filters_by_structure_includes_all_its_networks(self):
+        queryset = apply_flow_filters(
+            Flow.objects.all(),
+            {"structure_id": str(self.structure.id)},
+        )
+
+        self.assertEqual(set(queryset), {self.flow_a, self.flow_b})
 
     def test_apply_flow_filters_by_ip_port_network_and_ordering(self):
         queryset = apply_flow_filters(

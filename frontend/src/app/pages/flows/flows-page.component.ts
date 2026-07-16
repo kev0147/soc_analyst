@@ -2,10 +2,11 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, QueryParams } from '../../core/api/api.service';
-import { Flow } from '../../core/api/api.types';
+import { Flow, Structure } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
 
 interface FlowFilters extends QueryParams {
+  structure_id: number | null;
   ordering: string;
   date_from: string;
   date_to: string;
@@ -33,6 +34,15 @@ interface FlowFilters extends QueryParams {
       </div>
 
       <section class="card filters">
+        <label class="field">
+          <span>Structure</span>
+          <select class="select" [(ngModel)]="filters.structure_id">
+            <option [ngValue]="null">Toutes les structures</option>
+            @for (structure of structures(); track structure.id) {
+              <option [ngValue]="structure.id">{{ structure.name }}</option>
+            }
+          </select>
+        </label>
         <label class="field">
           <span>Début période</span>
           <input class="input" type="datetime-local" [(ngModel)]="filters.date_from" />
@@ -129,9 +139,11 @@ interface FlowFilters extends QueryParams {
 export class FlowsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   readonly flows = signal<Flow[]>([]);
+  readonly structures = signal<Structure[]>([]);
   readonly bytes = formatBytes;
   readonly duration = formatDuration;
   filters: FlowFilters = {
+    structure_id: null,
     ordering: '-started_at',
     date_from: '',
     date_to: '',
@@ -145,6 +157,7 @@ export class FlowsPageComponent implements OnInit {
   };
 
   ngOnInit() {
+    this.api.structures().subscribe((data) => this.structures.set(data.results));
     this.load();
   }
 

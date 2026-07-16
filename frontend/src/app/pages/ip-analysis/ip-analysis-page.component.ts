@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
-import { IpAnalysisRecord } from '../../core/api/api.types';
+import { IpAnalysisRecord, Structure } from '../../core/api/api.types';
 
 @Component({
   selector: 'app-ip-analysis-page',
@@ -61,6 +61,12 @@ import { IpAnalysisRecord } from '../../core/api/api.types';
       <section class="card">
         <h2>Adresses IP analysées</h2>
         <div class="toolbar">
+          <select class="select" [(ngModel)]="structureId">
+            <option [ngValue]="null">Toutes les structures</option>
+            @for (structure of structures(); track structure.id) {
+              <option [ngValue]="structure.id">{{ structure.name }}</option>
+            }
+          </select>
           <input class="input" [(ngModel)]="ipFilter" placeholder="Filtrer par IP" />
           <select class="select" [(ngModel)]="verdict">
             <option value="">Toutes</option>
@@ -125,8 +131,10 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   readonly message = signal('');
   readonly records = signal<IpAnalysisRecord[]>([]);
+  readonly structures = signal<Structure[]>([]);
   scope: 'all_flows' | 'import' = 'all_flows';
   importId: number | null = null;
+  structureId: number | null = null;
   verdict = '';
   ipFilter = '';
   tools = {
@@ -137,6 +145,7 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit() {
+    this.api.structures().subscribe((data) => this.structures.set(data.results));
     this.load();
   }
 
@@ -178,7 +187,11 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
   }
 
   load() {
-    this.api.ipAnalysisRecords({ verdict: this.verdict, ip: this.ipFilter }).subscribe({
+    this.api.ipAnalysisRecords({
+      structure_id: this.structureId,
+      verdict: this.verdict,
+      ip: this.ipFilter,
+    }).subscribe({
       next: (data) => {
         this.records.set(data.results);
         this.message.set(`${data.count} résultat(s).`);

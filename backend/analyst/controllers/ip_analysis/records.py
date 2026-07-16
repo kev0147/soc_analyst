@@ -1,5 +1,6 @@
 from django.db.models import Case, IntegerField, Value, When
 from rest_framework import generics
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 
 from analyst.controllers.audit import record_audit
@@ -28,6 +29,15 @@ class IPAnalysisRecordsController(generics.ListAPIView):
         ip = self.request.query_params.get("ip")
         if ip:
             queryset = queryset.filter(ip_address__icontains=ip)
+        structure_id = self.request.query_params.get("structure_id")
+        if structure_id not in (None, ""):
+            try:
+                structure_id = int(structure_id)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError({"structure_id": "Doit être un entier."}) from exc
+            queryset = queryset.filter(
+                observations__network__structure_id=structure_id
+            ).distinct()
         country = self.request.query_params.get("country")
         if country:
             queryset = queryset.filter(country__iexact=country)
