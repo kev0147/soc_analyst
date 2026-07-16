@@ -1,10 +1,11 @@
 from pathlib import Path
 from io import StringIO
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.core.management import call_command, CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 
 from django.utils import timezone
 
@@ -18,6 +19,7 @@ from .models import (
     BackgroundJob,
     Flow,
     FlowImport,
+    FlowImportItem,
     IPReputation,
     IPReputationResult,
     Network,
@@ -47,13 +49,21 @@ from .services.flows import apply_flow_filters, flow_export_rows
 from .services.imports import confirm_flow_import, preview_flow_import_upload
 from .services.ip_intelligence import build_ip_timeline
 from .services.bulletins import create_bulletin_from_findings, create_bulletin_with_links, find_duplicate_bulletins
-from .services.analytics import build_dashboard_overview, top_conversations, top_peers, top_ports_protocols, top_talkers
+from .services.analytics import (
+    build_dashboard_overview,
+    malicious_communications,
+    top_conversations,
+    top_peers,
+    top_ports_protocols,
+    top_talkers,
+)
 from .services.security import audit_action_catalog, permission_matrix
 from .controllers.audit import record_audit
 from .services.ip_reputation import candidate_ips, run_reputation_analysis
 from .services.ip_reputation.clients import ReputationClientResult
 from .services.peer_observations import sync_peer_observations
 from .services.jobs.tasks import execute_background_job
+from .services.jobs.supervisor import WorkerHeartbeat, worker_status
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
@@ -507,6 +517,107 @@ class BackgroundJobApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class StructureAdministrationApiTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="structure-admin@example.com",
+            password="a-long-test-password",
+            role=UserRole.ADMIN,
+        )
+        self.client.force_login(self.admin)
+
+    def test_admin_can_create_structure_network_and_cidr_then_filter_them(self):
+        structure_response = self.client.post(
+            "/api/v1/structures/create/",
+            {"name": "Nouvelle structure", "code": "NEW", "description": "SOC"},
+            content_type="application/json",
+        )
+        self.assertEqual(structure_response.status_code, 201)
+        structure_id = structure_response.json()["id"]
+
+        network_response = self.client.post(
+            "/api/v1/networks/create/",
+            {"structure": structure_id, "name": "Réseau principal"},
+            content_type="application/json",
+        )
+        self.assertEqual(network_response.status_code, 201)
+        network_id = network_response.json()["id"]
+
+        cidr_response = self.client.post(
+            "/api/v1/network-cidrs/create/",
+            {"network": network_id, "cidr": "10.20.30.40/24", "label": "LAN"},
+            content_type="application/json",
+        )
+        networks = self.client.get("/api/v1/networks/", {"structure_id": structure_id})
+        cidrs = self.client.get("/api/v1/network-cidrs/", {"network_id": network_id})
+
+        self.assertEqual(cidr_response.status_code, 201)
+        self.assertEqual(cidr_response.json()["cidr"], "10.20.30.0/24")
+        self.assertEqual(networks.json()["count"], 1)
+        self.assertEqual(cidrs.json()["count"], 1)
+
+
+class WorkerApiTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="worker-admin@example.com",
+            password="a-long-test-password",
+            role=UserRole.ADMIN,
+        )
+        self.viewer = User.objects.create_user(
+            email="worker-viewer@example.com",
+            password="a-long-test-password",
+            role=UserRole.VIEWER,
+        )
+        self.status = {
+            "status": "running",
+            "state": "idle",
+            "pid": 123,
+            "hostname": "test-host",
+            "started_at": "2026-07-16T10:00:00+00:00",
+            "last_heartbeat_at": "2026-07-16T10:00:05+00:00",
+            "heartbeat_age_seconds": 1,
+            "current_job_id": None,
+        }
+
+    @patch("analyst.controllers.worker.status.worker_status")
+    def test_authenticated_user_can_read_worker_status(self, mocked_status):
+        mocked_status.return_value = self.status
+        self.client.force_login(self.viewer)
+
+        response = self.client.get("/api/v1/workers/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "running")
+
+    @patch("analyst.controllers.worker.start.start_background_worker")
+    def test_only_admin_can_start_worker(self, mocked_start):
+        mocked_start.return_value = {**self.status, "status": "starting", "state": "starting", "already_running": False}
+        self.client.force_login(self.viewer)
+        forbidden = self.client.post("/api/v1/workers/start/", {}, content_type="application/json")
+        self.client.force_login(self.admin)
+        accepted = self.client.post("/api/v1/workers/start/", {}, content_type="application/json")
+
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(accepted.status_code, 202)
+        self.assertTrue(AuditEvent.objects.filter(action="BACKGROUND_WORKER_START_REQUESTED").exists())
+
+    def test_heartbeat_reports_running_then_stopped_without_database_writes(self):
+        TEST_MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+        with override_settings(
+            BASE_DIR=TEST_MEDIA_ROOT,
+            WORKER_HEARTBEAT_SECONDS=1,
+            WORKER_STALE_SECONDS=5,
+        ):
+            with WorkerHeartbeat():
+                running = worker_status()
+            stopped = worker_status()
+
+        self.assertEqual(running["status"], "running")
+        self.assertEqual(running["state"], "idle")
+        self.assertEqual(stopped["status"], "stopped")
+
+
 class IPAnalysisRecordsApiTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -777,6 +888,127 @@ class AnalyticsDashboardTests(TestCase):
         self.assertEqual(overview["top_malicious_ips_by_duration"][0]["total_duration_seconds"], 600)
         self.assertEqual(overview["top_hosts_with_malicious_by_volume"][0]["host_ip"], "10.0.0.20")
         self.assertEqual(overview["top_hosts_with_malicious_by_duration"][0]["host_ip"], "10.0.0.10")
+
+
+class MaliciousCommunicationsAnalysisTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="correlation@example.com",
+            password="a-long-test-password",
+            role=UserRole.ANALYST,
+        )
+        self.structure = Structure.objects.create(name="Structure corrélation", code="CORR")
+        self.network = Network.objects.create(structure=self.structure, name="Réseau corrélation")
+        self.other_structure = Structure.objects.create(name="Structure hors périmètre", code="OUT")
+        self.other_network = Network.objects.create(structure=self.other_structure, name="Réseau hors périmètre")
+        IPReputation.objects.create(
+            ip_address="198.51.100.10",
+            verdict=ReputationVerdict.MALICIOUS,
+            score=95,
+            country="FR",
+        )
+        IPReputation.objects.create(
+            ip_address="203.0.113.20",
+            verdict=ReputationVerdict.MALICIOUS,
+            score=80,
+            country="CA",
+        )
+        self.flow_a = Flow.objects.create(
+            network=self.network,
+            sna_flow_id="corr-a",
+            started_at="2026-07-01T08:00:00Z",
+            mapping_method=MappingMethod.ORIENTATION,
+            direction=FlowDirection.OUTBOUND,
+            src_ip="10.0.0.10",
+            src_port=51000,
+            dst_ip="198.51.100.10",
+            dst_port=443,
+            service="https",
+            duration_seconds=100,
+            total_bytes=10_000,
+        )
+        self.flow_b = Flow.objects.create(
+            network=self.network,
+            sna_flow_id="corr-b",
+            started_at="2026-07-02T08:00:00Z",
+            mapping_method=MappingMethod.ORIENTATION,
+            direction=FlowDirection.INBOUND,
+            src_ip="203.0.113.20",
+            src_port=44444,
+            dst_ip="10.0.0.10",
+            dst_port=22,
+            service="ssh",
+            duration_seconds=200,
+            total_bytes=20_000,
+        )
+        self.flow_c = Flow.objects.create(
+            network=self.network,
+            sna_flow_id="corr-c",
+            started_at="2026-07-03T08:00:00Z",
+            mapping_method=MappingMethod.ORIENTATION,
+            direction=FlowDirection.OUTBOUND,
+            src_ip="10.0.0.20",
+            src_port=52000,
+            dst_ip="198.51.100.10",
+            dst_port=443,
+            service="https",
+            duration_seconds=50,
+            total_bytes=5_000,
+        )
+        Flow.objects.create(
+            network=self.other_network,
+            sna_flow_id="corr-outside",
+            started_at="2026-07-03T09:00:00Z",
+            mapping_method=MappingMethod.ORIENTATION,
+            direction=FlowDirection.OUTBOUND,
+            src_ip="10.99.0.10",
+            dst_ip="198.51.100.10",
+            dst_port=443,
+            duration_seconds=9_999,
+            total_bytes=9_999_999,
+        )
+
+    def test_structure_scope_correlates_hosts_peers_ports_countries_and_totals(self):
+        result = malicious_communications({
+            "scope": "structure",
+            "structure_id": str(self.structure.id),
+            "ordering": "-total_bytes",
+        })
+
+        self.assertEqual(result["count"], 2)
+        self.assertEqual(result["totals"]["total_bytes"], 35_000)
+        first = result["results"][0]
+        self.assertEqual(first["host_ip"], "10.0.0.10")
+        self.assertEqual(first["total_duration_seconds"], 300)
+        self.assertEqual(first["peer_ports"], [443, 44444])
+        self.assertEqual(first["countries"], ["CA", "FR"])
+        self.assertEqual({peer["ip_address"] for peer in first["malicious_peers"]}, {"198.51.100.10", "203.0.113.20"})
+
+    def test_import_and_date_scopes_and_peer_filters(self):
+        flow_import = FlowImport.objects.create(
+            structure=self.structure,
+            uploaded_by=self.user,
+            original_filename="scope.csv",
+            stored_path="scope.csv",
+            file_sha256="a" * 64,
+            file_size_bytes=100,
+        )
+        FlowImportItem.objects.create(flow_import=flow_import, flow=self.flow_a, source_row_number=1)
+        FlowImportItem.objects.create(flow_import=flow_import, flow=self.flow_c, source_row_number=2)
+
+        imported = malicious_communications({"scope": "import", "import_id": str(flow_import.id)})
+        dated = malicious_communications({
+            "scope": "date_range",
+            "date_from": "2026-07-02T00:00:00Z",
+            "date_to": "2026-07-02T23:59:59Z",
+            "country": "CA",
+            "peer_port": "44444",
+        })
+
+        self.assertEqual(imported["totals"]["flows"], 2)
+        self.assertEqual(imported["totals"]["malicious_peers"], 1)
+        self.assertEqual(dated["count"], 1)
+        self.assertEqual(dated["results"][0]["total_bytes"], 20_000)
 
 
 class IPReputationTests(TestCase):

@@ -9,13 +9,16 @@ import {
   Flow,
   FlowImport,
   IpAnalysisRecord,
+  MaliciousCommunicationAnalysis,
   Network,
+  NetworkCidr,
   PaginatedResponse,
   PeerObservation,
   RiskProfile,
   Structure,
   TopPeer,
   User,
+  WorkerStatus,
 } from './api.types';
 
 export type QueryParams = Record<string, string | number | boolean | null | undefined>;
@@ -51,6 +54,24 @@ export class ApiService {
 
   structures(params: QueryParams = {}): Observable<PaginatedResponse<Structure>> {
     return this.http.get<PaginatedResponse<Structure>>(`${this.baseUrl}/structures/`, { params: this.params(params) });
+  }
+
+  createStructure(payload: { name: string; code: string; description?: string }): Observable<Structure> {
+    return this.http.post<Structure>(`${this.baseUrl}/structures/create/`, payload);
+  }
+
+  createNetwork(payload: { structure: number; name: string; description?: string }): Observable<Network> {
+    return this.http.post<Network>(`${this.baseUrl}/networks/create/`, payload);
+  }
+
+  networkCidrs(params: QueryParams = {}): Observable<PaginatedResponse<NetworkCidr>> {
+    return this.http.get<PaginatedResponse<NetworkCidr>>(`${this.baseUrl}/network-cidrs/`, {
+      params: this.params(params),
+    });
+  }
+
+  createNetworkCidr(payload: { network: number; cidr: string; label?: string }): Observable<NetworkCidr> {
+    return this.http.post<NetworkCidr>(`${this.baseUrl}/network-cidrs/create/`, payload);
   }
 
   previewImport(structureId: number, file: File): Observable<unknown> {
@@ -129,6 +150,12 @@ export class ApiService {
     return this.http.post<{ job: BackgroundJob; already_queued: boolean }>(`${this.baseUrl}/ip-analysis/run/`, payload);
   }
 
+  maliciousCommunications(params: QueryParams): Observable<MaliciousCommunicationAnalysis> {
+    return this.http.get<MaliciousCommunicationAnalysis>(`${this.baseUrl}/analytics/malicious-communications/`, {
+      params: this.params(params),
+    });
+  }
+
   backgroundJobs(params: QueryParams = {}): Observable<PaginatedResponse<BackgroundJob>> {
     return this.http.get<PaginatedResponse<BackgroundJob>>(`${this.baseUrl}/background-jobs/`, { params: this.params(params) });
   }
@@ -139,6 +166,14 @@ export class ApiService {
 
   retryBackgroundJob(id: string): Observable<BackgroundJob> {
     return this.http.post<BackgroundJob>(`${this.baseUrl}/background-jobs/${id}/retry/`, {});
+  }
+
+  workerStatus(): Observable<WorkerStatus> {
+    return this.http.get<WorkerStatus>(`${this.baseUrl}/workers/status/`);
+  }
+
+  startWorker(): Observable<WorkerStatus> {
+    return this.http.post<WorkerStatus>(`${this.baseUrl}/workers/start/`, {});
   }
 
   private params(values: QueryParams): HttpParams {

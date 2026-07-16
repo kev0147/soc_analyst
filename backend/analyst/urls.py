@@ -6,6 +6,8 @@ from analyst.controllers.user.me import CurrentUserController
 from analyst.controllers.background_job.list import BackgroundJobListController
 from analyst.controllers.background_job.retrieve import BackgroundJobRetrieveController
 from analyst.controllers.background_job.retry import BackgroundJobRetryController
+from analyst.controllers.worker.status import WorkerStatusController
+from analyst.controllers.worker.start import WorkerStartController
 from analyst.controllers.bulletin.restore import BulletinRestoreController
 from analyst.controllers.password_reset_token.consume import PasswordResetTokenConsumeController
 from analyst.controllers.user.list import UserListController
@@ -99,6 +101,7 @@ from analyst.controllers.analytics.top_talkers import TopTalkersController
 from analyst.controllers.analytics.top_peers import TopPeersController
 from analyst.controllers.analytics.top_conversations import TopConversationsController
 from analyst.controllers.analytics.top_ports_protocols import TopPortsProtocolsController
+from analyst.controllers.analytics.malicious_communications import MaliciousCommunicationsController
 from analyst.controllers.dashboard.overview import DashboardOverviewController
 from analyst.controllers.security.permission_matrix import PermissionMatrixController
 from analyst.controllers.ip_analysis.records import IPAnalysisRecordsController
@@ -133,6 +136,8 @@ urlpatterns = [
     path("background-jobs/", BackgroundJobListController.as_view(), name="background_job-list"),
     path("background-jobs/<uuid:pk>/", BackgroundJobRetrieveController.as_view(), name="background_job-retrieve"),
     path("background-jobs/<uuid:pk>/retry/", BackgroundJobRetryController.as_view(), name="background_job-retry"),
+    path("workers/status/", WorkerStatusController.as_view(), name="worker-status"),
+    path("workers/start/", WorkerStartController.as_view(), name="worker-start"),
     path("auth/login/", LoginController.as_view(), name="login"),
     path("auth/logout/", LogoutController.as_view(), name="logout"),
     path("auth/me/", CurrentUserController.as_view(), name="current-user"),
@@ -179,6 +184,7 @@ urlpatterns = [
     path("analytics/top-peers/", TopPeersController.as_view(), name="top-peers"),
     path("analytics/top-conversations/", TopConversationsController.as_view(), name="top-conversations"),
     path("analytics/top-ports-protocols/", TopPortsProtocolsController.as_view(), name="top-ports-protocols"),
+    path("analytics/malicious-communications/", MaliciousCommunicationsController.as_view(), name="malicious-communications"),
     path("dashboard/overview/", DashboardOverviewController.as_view(), name="dashboard-overview"),
     path("flow-import-items/", FlowImportItemListController.as_view(), name="flow_import_item-list"),
     path("flow-import-items/<int:pk>/", FlowImportItemRetrieveController.as_view(), name="flow_import_item-retrieve"),

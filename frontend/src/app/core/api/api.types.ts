@@ -46,6 +46,18 @@ export interface BackgroundJob {
   result: Record<string, unknown>;
 }
 
+export interface WorkerStatus {
+  status: 'running' | 'starting' | 'stopped' | 'offline';
+  state: 'idle' | 'busy' | 'starting' | 'offline' | 'unknown' | 'invalid_status';
+  pid: number | null;
+  hostname: string;
+  started_at: string | null;
+  last_heartbeat_at: string | null;
+  heartbeat_age_seconds: number | null;
+  current_job_id: string | null;
+  already_running?: boolean;
+}
+
 export interface Structure {
   id: number;
   name: string;
@@ -105,6 +117,14 @@ export interface DashboardOverview {
   hosts_communicating_with_malicious?: Array<Record<string, unknown>>;
 }
 
+export interface NetworkCidr {
+  id: number;
+  network: number;
+  cidr: string;
+  label: string;
+  created_at: string;
+}
+
 export interface MaliciousIpDashboardStat {
   ip_address: string;
   country: string;
@@ -125,6 +145,48 @@ export interface MaliciousHostDashboardStat {
   malicious_peer_count: number;
   malicious_ips: string[];
   last_seen_at: string | null;
+}
+
+export interface MaliciousCommunicationPeer {
+  ip_address: string;
+  country: string;
+  score: number | null;
+  ports: number[];
+  host_ports: number[];
+  services: string[];
+  flow_count: number;
+  total_bytes: number;
+  total_duration_seconds: number;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+}
+
+export interface MaliciousCommunicationRow {
+  host_ip: string;
+  malicious_peer_count: number;
+  malicious_peers: MaliciousCommunicationPeer[];
+  countries: string[];
+  peer_ports: number[];
+  host_ports: number[];
+  flow_count: number;
+  total_bytes: number;
+  total_duration_seconds: number;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+}
+
+export interface MaliciousCommunicationAnalysis {
+  scope: 'structure' | 'import' | 'date_range';
+  ordering: string;
+  count: number;
+  totals: {
+    hosts: number;
+    malicious_peers: number;
+    flows: number;
+    total_bytes: number;
+    total_duration_seconds: number;
+  };
+  results: MaliciousCommunicationRow[];
 }
 
 export interface Bulletin {

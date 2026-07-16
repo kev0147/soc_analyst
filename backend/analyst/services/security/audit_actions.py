@@ -20,6 +20,8 @@ AUDIT_ACTIONS = {
     "BACKGROUND_JOB_COMPLETED": "Job asynchrone terminé",
     "BACKGROUND_JOB_FAILED": "Job asynchrone échoué",
     "BACKGROUND_JOB_RETRIED": "Job asynchrone relancé",
+    "BACKGROUND_WORKER_START_REQUESTED": "Démarrage du worker demandé",
+    "MALICIOUS_COMMUNICATIONS_ANALYZED": "Communications malveillantes corrélées",
     "BULLETIN_CREATED": "Bulletin créé",
     "BULLETIN_UPDATED": "Bulletin modifié",
     "BULLETIN_DELETED": "Bulletin supprimé",

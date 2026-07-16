@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 from analyst.models import BackgroundJob
 from analyst.models.choices import BackgroundJobStatus
 from analyst.services.jobs.tasks import execute_background_job, fail_interrupted_jobs
+from analyst.services.jobs.supervisor import WorkerHeartbeat
 
 
 class WorkerLock:
@@ -74,7 +75,7 @@ class Command(BaseCommand):
         poll_seconds = max(options["poll_seconds"], 0.1)
         lock_path = Path(settings.BASE_DIR) / ".background_jobs.lock"
 
-        with WorkerLock(lock_path):
+        with WorkerLock(lock_path), WorkerHeartbeat() as heartbeat:
             recovered = fail_interrupted_jobs()
             if recovered:
                 self.stdout.write(self.style.WARNING(f"{recovered} job(s) interrompu(s) marqué(s) en échec."))
@@ -95,12 +96,15 @@ class Command(BaseCommand):
                         continue
 
                     self.stdout.write(f"Traitement du job {job_id}...")
+                    heartbeat.set_current_job(str(job_id))
                     try:
                         execute_background_job(str(job_id))
                     except Exception as exc:
                         self.stderr.write(self.style.ERROR(f"Job {job_id} échoué : {exc}"))
                     else:
                         self.stdout.write(self.style.SUCCESS(f"Job {job_id} terminé."))
+                    finally:
+                        heartbeat.set_current_job(None)
             except KeyboardInterrupt:
                 self.stdout.write("Arrêt demandé.")
 

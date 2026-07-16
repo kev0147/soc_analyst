@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { AuthService } from '../../core/auth/auth.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -12,6 +13,9 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
           <a [routerLink]="item.path" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }">
             {{ item.label }}
           </a>
+        }
+        @if (auth.user()?.role === 'admin') {
+          <a routerLink="/structures" routerLinkActive="active">Structures</a>
         }
       </nav>
     </aside>
@@ -58,11 +62,14 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
   `,
 })
 export class SidebarComponent {
+  readonly auth = inject(AuthService);
   readonly items = [
     { path: '/dashboard', label: 'Dashboard', exact: true },
     { path: '/imports', label: 'Imports CSV', exact: true },
     { path: '/flows', label: 'Flows', exact: true },
+    { path: '/analysis', label: 'Analyse SOC', exact: true },
     { path: '/ip-analysis', label: 'Analyse IP', exact: true },
+    { path: '/workers', label: 'Workers', exact: true },
     { path: '/soc-peers', label: 'Peers', exact: true },
     { path: '/bulletins', label: 'Bulletins', exact: true },
     { path: '/bulletins/new', label: 'Ajouter un bulletin', exact: true },

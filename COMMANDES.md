@@ -60,6 +60,8 @@ IP_REPUTATION_ABUSEIPDB_TTL_HOURS=24
 IP_REPUTATION_VIRUSTOTAL_TTL_HOURS=168
 IP_REPUTATION_ERROR_RETRY_HOURS=1
 BACKGROUND_JOBS_POLL_SECONDS=1
+WORKER_HEARTBEAT_SECONDS=5
+WORKER_STALE_SECONDS=20
 SQLITE_TIMEOUT_SECONDS=30
 ```
 
@@ -122,6 +124,17 @@ Réinitialiser le mot de passe d'un utilisateur existant :
 L'option `--force` de `init_admin` ne doit être utilisée que pour créer ou promouvoir explicitement un autre administrateur.
 
 ## 5. Démarrage quotidien
+
+### Lanceur automatique
+
+Sous Windows, double-cliquer sur `START_ANALYST.bat` lance les migrations, l'API,
+le worker et le frontend, puis ouvre le navigateur. Les journaux sont enregistrés
+dans `backend\.runtime`.
+
+Pour arrêter uniquement les processus démarrés par ce lanceur, double-cliquer sur
+`STOP_ANALYST.bat`.
+
+Le démarrage manuel reste disponible ci-dessous pour le diagnostic.
 
 Ouvrir trois terminaux depuis la racine du projet.
 

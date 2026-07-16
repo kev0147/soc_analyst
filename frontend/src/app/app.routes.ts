@@ -9,6 +9,9 @@ import { IpAnalysisPageComponent } from './pages/ip-analysis/ip-analysis-page.co
 import { SocPeersPageComponent } from './pages/soc-peers/soc-peers-page.component';
 import { BulletinsPageComponent } from './pages/bulletins/bulletins-page.component';
 import { BulletinCreatePageComponent } from './pages/bulletin-create/bulletin-create-page.component';
+import { AnalysisPageComponent } from './pages/analysis/analysis-page.component';
+import { StructuresPageComponent } from './pages/structures/structures-page.component';
+import { WorkersPageComponent } from './pages/workers/workers-page.component';
 
 export const routes: Routes = [
   { path: 'login', component: LoginPageComponent },
@@ -21,10 +24,13 @@ export const routes: Routes = [
       { path: 'dashboard', component: DashboardPageComponent },
       { path: 'imports', component: ImportsPageComponent },
       { path: 'flows', component: FlowsPageComponent },
+      { path: 'analysis', component: AnalysisPageComponent },
       { path: 'ip-analysis', component: IpAnalysisPageComponent },
       { path: 'soc-peers', component: SocPeersPageComponent },
       { path: 'bulletins', component: BulletinsPageComponent },
       { path: 'bulletins/new', component: BulletinCreatePageComponent },
+      { path: 'structures', component: StructuresPageComponent },
+      { path: 'workers', component: WorkersPageComponent },
     ],
   },
   { path: '**', redirectTo: 'dashboard' },

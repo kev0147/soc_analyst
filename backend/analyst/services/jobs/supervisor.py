@@ -1,0 +1,167 @@
+import json
+import os
+import socket
+import subprocess
+import sys
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
+
+from django.conf import settings
+
+
+def _runtime_dir() -> Path:
+    path = Path(settings.BASE_DIR) / ".runtime"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _status_path() -> Path:
+    return _runtime_dir() / "background_worker.json"
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _write_status(payload: dict):
+    path = _status_path()
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(path)
+
+
+class WorkerHeartbeat:
+    def __init__(self):
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+        self._publish_lock = threading.Lock()
+        self._started_at = _utc_now()
+        self._state = "idle"
+        self._current_job_id = None
+        self._thread = threading.Thread(target=self._run, name="worker-heartbeat", daemon=True)
+
+    def __enter__(self):
+        self._publish("running")
+        self._thread.start()
+        return self
+
+    def set_current_job(self, job_id: str | None):
+        with self._lock:
+            self._current_job_id = str(job_id) if job_id else None
+            self._state = "busy" if job_id else "idle"
+        self._publish("running")
+
+    def _payload(self, process_status: str) -> dict:
+        with self._lock:
+            state = self._state
+            current_job_id = self._current_job_id
+        return {
+            "process_status": process_status,
+            "state": state,
+            "pid": os.getpid(),
+            "hostname": socket.gethostname(),
+            "started_at": self._started_at,
+            "last_heartbeat_at": _utc_now(),
+            "current_job_id": current_job_id,
+        }
+
+    def _publish(self, process_status: str):
+        try:
+            with self._publish_lock:
+                _write_status(self._payload(process_status))
+        except OSError:
+            # Le worker continue même si son fichier de supervision est momentanément indisponible.
+            pass
+
+    def _run(self):
+        interval = max(float(settings.WORKER_HEARTBEAT_SECONDS), 1.0)
+        while not self._stop.wait(interval):
+            self._publish("running")
+
+    def __exit__(self, exc_type, exc, traceback):
+        self._stop.set()
+        self._thread.join(timeout=2)
+        self._publish("stopped")
+
+
+def worker_status() -> dict:
+    path = _status_path()
+    if not path.exists():
+        return {
+            "status": "offline",
+            "state": "unknown",
+            "pid": None,
+            "hostname": "",
+            "started_at": None,
+            "last_heartbeat_at": None,
+            "heartbeat_age_seconds": None,
+            "current_job_id": None,
+        }
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        last_heartbeat = datetime.fromisoformat(payload["last_heartbeat_at"])
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return {
+            "status": "offline",
+            "state": "invalid_status",
+            "pid": None,
+            "hostname": "",
+            "started_at": None,
+            "last_heartbeat_at": None,
+            "heartbeat_age_seconds": None,
+            "current_job_id": None,
+        }
+
+    age = max((datetime.now(timezone.utc) - last_heartbeat).total_seconds(), 0)
+    process_status = payload.get("process_status")
+    alive = process_status == "running" and age <= float(settings.WORKER_STALE_SECONDS)
+    return {
+        "status": "running" if alive else ("stopped" if process_status == "stopped" else "offline"),
+        "state": payload.get("state", "unknown") if alive else "offline",
+        "pid": payload.get("pid"),
+        "hostname": payload.get("hostname", ""),
+        "started_at": payload.get("started_at"),
+        "last_heartbeat_at": payload.get("last_heartbeat_at"),
+        "heartbeat_age_seconds": round(age, 1),
+        "current_job_id": payload.get("current_job_id") if alive else None,
+    }
+
+
+def start_background_worker() -> dict:
+    current = worker_status()
+    if current["status"] == "running":
+        return {**current, "already_running": True}
+
+    runtime_dir = _runtime_dir()
+    log_path = runtime_dir / "background_worker.log"
+    manage_py = Path(settings.BASE_DIR) / "manage.py"
+    log_handle = log_path.open("ab")
+    kwargs = {
+        "cwd": str(settings.BASE_DIR),
+        "stdout": log_handle,
+        "stderr": subprocess.STDOUT,
+        "stdin": subprocess.DEVNULL,
+    }
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    else:
+        kwargs["start_new_session"] = True
+    try:
+        process = subprocess.Popen(
+            [sys.executable, str(manage_py), "run_background_jobs"],
+            **kwargs,
+        )
+    finally:
+        log_handle.close()
+    return {
+        "status": "starting",
+        "state": "starting",
+        "pid": process.pid,
+        "hostname": socket.gethostname(),
+        "started_at": _utc_now(),
+        "last_heartbeat_at": None,
+        "heartbeat_age_seconds": None,
+        "current_job_id": None,
+        "already_running": False,
+    }

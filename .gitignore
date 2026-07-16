@@ -16,3 +16,4 @@ __pycache__/
 backend/media/
 backend/media_test/
 backend/.background_jobs.lock
+backend/.runtime/
