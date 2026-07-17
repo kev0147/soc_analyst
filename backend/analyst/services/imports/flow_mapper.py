@@ -74,7 +74,19 @@ def _endpoint(row: dict[str, str], prefix: str) -> Endpoint:
         hostname=text_or_blank(_first(row, f"{prefix} Hostname", f"{technical_prefix}.name")),
         port=port,
         role=_role(_first(row, f"{prefix} Orientation", f"{technical_prefix}.orientation")),
-        location=text_or_blank(row.get(f"{prefix} Location")),
+        # L'export lisible expose "Peer Location". Dans l'export technique
+        # fourni par SNA, la même information peut être placée dans
+        # peer.hostGroups/searchSubject.hostGroups (ex. "Canada").
+        location=text_or_blank(
+            _first(
+                row,
+                f"{prefix} Location",
+                f"{technical_prefix}.location",
+                f"{technical_prefix}.country",
+                f"{technical_prefix}.countryCode",
+                f"{technical_prefix}.hostGroups",
+            )
+        ),
         asn=integer(row.get(f"{prefix} ASN")),
         asn_assignment=text_or_blank(row.get(f"{prefix} ASN Assignment")),
         bytes=integer(_first(row, f"{prefix} Bytes", f"{technical_prefix}.transferBytes")),

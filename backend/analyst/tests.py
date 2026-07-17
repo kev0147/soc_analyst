@@ -380,12 +380,12 @@ class FlowImportServiceTests(TestCase):
         csv_body = (
             'id,"domainId","firstActiveTime","lastActiveTime","activeDuration",'
             '"searchSubject.ipAddress","searchSubject.orientation","searchSubject.portProtocol.port","searchSubject.portProtocol.protocol",'
-            '"peer.ipAddress","peer.orientation","peer.portProtocol.port","peer.portProtocol.protocol",'
+            '"peer.ipAddress","peer.orientation","peer.portProtocol.port","peer.portProtocol.protocol","peer.hostGroups",'
             '"connection.transferBytes","connection.transferPackets","connection.transferByteRate","connection.transferPacketRate",'
             '"connection.tcpConnections","connection.tcpRetransmissions","connection.application.name"\n'
             '2246437167,"301","Wed Jul 08 22:44:40 UTC 2026","Wed Jul 08 22:44:41 UTC 2026","1000",'
             '"10.10.30.40","server","5060","UDP",'
-            '"192.95.20.52","client","4040","UDP",'
+            '"192.95.20.52","client","4040","UDP","Canada",'
             '"1272","2","1272.0","2.0","0","-1","SIP (unclassified)"\n'
         )
 
@@ -400,6 +400,7 @@ class FlowImportServiceTests(TestCase):
         self.assertEqual(flow.direction, FlowDirection.INBOUND)
         self.assertEqual(flow.src_ip, "192.95.20.52")
         self.assertEqual(flow.src_port, 4040)
+        self.assertEqual(flow.src_location, "Canada")
         self.assertEqual(flow.dst_ip, "10.10.30.40")
         self.assertEqual(flow.dst_port, 5060)
         self.assertEqual(flow.protocol, "UDP")
