@@ -21,7 +21,9 @@ from .peer_observation import PeerObservationSerializer
 from .peer_observation_risk import PeerObservationRiskSerializer
 from .recommendation_catalog import RecommendationCatalogSerializer
 from .risk_catalog import RiskCatalogSerializer
+from .risk_indicator import RiskIndicatorSerializer
 from .risk_profile import RiskProfileSerializer
+from .risk_profile_port_service import RiskProfilePortServiceSerializer
 from .structure import StructureSerializer
 from .user import UserSerializer
 

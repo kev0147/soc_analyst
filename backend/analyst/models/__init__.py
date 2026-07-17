@@ -21,7 +21,10 @@ from .peer_observation import PeerObservation
 from .peer_observation_risk import PeerObservationRisk
 from .recommendation_catalog import RecommendationCatalog
 from .risk_catalog import RiskCatalog
+from .risk_indicator import RiskIndicator
 from .risk_profile import RiskProfile
+from .risk_profile_indicator import RiskProfileIndicator
+from .risk_profile_port_service import RiskProfilePortService
 from .structure import Structure
 from .user import User
 
@@ -49,7 +52,10 @@ __all__ = [
     "PeerObservationRisk",
     "RecommendationCatalog",
     "RiskCatalog",
+    "RiskIndicator",
     "RiskProfile",
+    "RiskProfileIndicator",
+    "RiskProfilePortService",
     "Structure",
     "User",
 ]

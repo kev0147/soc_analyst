@@ -71,7 +71,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
         </label>
         <label class="field">
           <span>Pays du peer</span>
-          <input class="input" [(ngModel)]="country" maxlength="2" placeholder="BF, FR..." />
+          <input class="input" [(ngModel)]="country" placeholder="FR, Canada, France..." />
         </label>
         <label class="field">
           <span>Port de l’hôte</span>
@@ -136,7 +136,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                     <td>{{ row.host_ports.join(', ') || '-' }}</td>
                     <td>{{ row.malicious_ip }}</td>
                     <td><span class="badge danger">{{ row.reputation_verdict }} · {{ row.reputation_score ?? '-' }}</span></td>
-                    <td>{{ row.peer_country || '-' }}</td>
+                    <td>{{ row.peer_country || 'Non renseigné' }}</td>
                     <td>{{ row.flow_count }}</td>
                     <td>{{ bytes(row.total_bytes) }}</td>
                     <td>{{ duration(row.total_duration_seconds) }}</td>

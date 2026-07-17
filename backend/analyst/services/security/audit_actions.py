@@ -23,6 +23,8 @@ AUDIT_ACTIONS = {
     "BACKGROUND_WORKER_START_REQUESTED": "Démarrage du worker demandé",
     "MALICIOUS_COMMUNICATIONS_ANALYZED": "Communications malveillantes corrélées",
     "BULLETIN_CREATED": "Bulletin créé",
+    "BULLETIN_CREATED_FROM_FINDINGS": "Bulletin créé depuis des observations peer",
+    "BULLETIN_DRAFT_CREATED_FROM_ASSISTANT": "Brouillon de bulletin créé par l'assistant",
     "BULLETIN_UPDATED": "Bulletin modifié",
     "BULLETIN_DELETED": "Bulletin supprimé",
     "BULLETIN_RESTORED": "Bulletin restauré",

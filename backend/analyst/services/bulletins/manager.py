@@ -72,6 +72,7 @@ def _highest_severity(risk_profiles):
 def create_bulletin_from_findings(data: dict, user, force_duplicate: bool = False) -> tuple[Bulletin | None, list[dict]]:
     observations = list(data["peer_observations"])
     risk_profiles = list(data["risk_profiles"])
+    risk_indicator = data.get("risk_indicator")
     finding_pairs = {(observation.id, risk_profile.id) for observation in observations for risk_profile in risk_profiles}
 
     duplicates = find_duplicate_bulletin_findings(
@@ -97,6 +98,7 @@ def create_bulletin_from_findings(data: dict, user, force_duplicate: bool = Fals
                 bulletin=bulletin,
                 peer_observation=observation,
                 risk_profile=risk_profile,
+                risk_indicator=risk_indicator,
                 severity=data.get("severity") or risk_profile.default_severity,
             )
 

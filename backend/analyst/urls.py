@@ -113,6 +113,9 @@ from analyst.controllers.risk_profile.retrieve import RiskProfileRetrieveControl
 from analyst.controllers.risk_profile.create import RiskProfileCreateController
 from analyst.controllers.risk_profile.update import RiskProfileUpdateController
 from analyst.controllers.risk_profile.delete import RiskProfileDeleteController
+from analyst.controllers.risk_indicator.list import RiskIndicatorListController
+from analyst.controllers.bulletin_assistant.matches import BulletinAssistantMatchesController
+from analyst.controllers.bulletin_assistant.create_draft import BulletinAssistantCreateDraftController
 from analyst.controllers.peer_observation.list import PeerObservationListController
 from analyst.controllers.peer_observation.retrieve import PeerObservationRetrieveController
 from analyst.controllers.peer_observation.create import PeerObservationCreateController
@@ -195,6 +198,8 @@ urlpatterns = [
     path("bulletins/check-duplicate/", BulletinCheckDuplicateController.as_view(), name="bulletin-check-duplicate"),
     path("bulletins/create/", BulletinCreateController.as_view(), name="bulletin-create"),
     path("bulletins/from-findings/", BulletinFromFindingsController.as_view(), name="bulletin-from-findings"),
+    path("bulletin-assistant/matches/", BulletinAssistantMatchesController.as_view(), name="bulletin-assistant-matches"),
+    path("bulletin-assistant/create-draft/", BulletinAssistantCreateDraftController.as_view(), name="bulletin-assistant-create-draft"),
     path("bulletins/<int:pk>/update/", BulletinUpdateController.as_view(), name="bulletin-update"),
     path("bulletins/<int:pk>/delete/", BulletinDeleteController.as_view(), name="bulletin-delete"),
     path("bulletins/<int:pk>/restore/", BulletinRestoreController.as_view(), name="bulletin-restore"),
@@ -219,6 +224,7 @@ urlpatterns = [
     path("recommendations/<int:pk>/update/", RecommendationCatalogUpdateController.as_view(), name="recommendation_catalog-update"),
     path("recommendations/<int:pk>/delete/", RecommendationCatalogDeleteController.as_view(), name="recommendation_catalog-delete"),
     path("risk-profiles/", RiskProfileListController.as_view(), name="risk_profile-list"),
+    path("risk-indicators/", RiskIndicatorListController.as_view(), name="risk-indicator-list"),
     path("risk-profiles/<int:pk>/", RiskProfileRetrieveController.as_view(), name="risk_profile-retrieve"),
     path("risk-profiles/create/", RiskProfileCreateController.as_view(), name="risk_profile-create"),
     path("risk-profiles/<int:pk>/update/", RiskProfileUpdateController.as_view(), name="risk_profile-update"),

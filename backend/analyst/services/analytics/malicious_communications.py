@@ -92,14 +92,15 @@ def malicious_communications(params) -> dict:
         host_ip = flow.dst_ip if src_is_malicious else flow.src_ip
         host_port = flow.dst_port if src_is_malicious else flow.src_port
         peer_port = flow.src_port if src_is_malicious else flow.dst_port
+        peer_location = flow.src_location if src_is_malicious else flow.dst_location
         reputation = reputations[peer_ip]
-        country = reputation.country.upper()
+        country = (reputation.country or peer_location or "").strip()
 
         if host_filter and host_ip != host_filter:
             continue
         if peer_filter and peer_ip != peer_filter:
             continue
-        if country_filter and country != country_filter:
+        if country_filter and country.upper() != country_filter:
             continue
         if host_port_filter is not None and host_port != host_port_filter:
             continue
@@ -114,7 +115,7 @@ def malicious_communications(params) -> dict:
                 "malicious_ip": peer_ip,
                 "reputation_verdict": reputation.verdict,
                 "reputation_score": reputation.score,
-                "peer_country": reputation.country,
+                "peer_country": country,
                 "peer_ports": set(),
                 "services": set(),
                 "flow_count": 0,
@@ -127,6 +128,8 @@ def malicious_communications(params) -> dict:
         row["flow_count"] += 1
         row["total_bytes"] += total_bytes
         row["total_duration_seconds"] += duration
+        if not row["peer_country"] and country:
+            row["peer_country"] = country
         if peer_port is not None:
             row["peer_ports"].add(peer_port)
         if host_port is not None:

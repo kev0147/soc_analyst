@@ -264,6 +264,25 @@ Forcer exceptionnellement l'actualisation des résultats encore frais :
 
 ## 8. Reprise de données historiques
 
+Valider le catalogue de risques sans modifier la base :
+
+```powershell
+.\.venv\Scripts\python.exe backend\manage.py import_risk_profiles_excel "C:\chemin\catalogue-risques.xlsx" --dry-run
+```
+
+Importer le catalogue confirmé (`ACTIVITÉS`, `PORTS/SERVICES`, `RISQUES`,
+`IMPACTS`, `IOCS`, `RECOMMANDATIONS`, `CRITICITÉ`) :
+
+```powershell
+.\.venv\Scripts\python.exe backend\manage.py import_risk_profiles_excel "C:\chemin\catalogue-risques.xlsx"
+```
+
+Si le catalogue se trouve dans une autre feuille :
+
+```powershell
+.\.venv\Scripts\python.exe backend\manage.py import_risk_profiles_excel "C:\chemin\catalogue-risques.xlsx" --sheet-index 2
+```
+
 Importer un ancien cache de réputation depuis SQLite ou CSV :
 
 ```powershell
@@ -276,10 +295,17 @@ Ou :
 .\.venv\Scripts\python.exe backend\manage.py import_legacy_ip_reputation "C:\chemin\reputations.csv"
 ```
 
-Une commande d'import historique de bulletins existe également. Ne l'utiliser qu'après validation du format et sur une sauvegarde de la base :
+Valider le classeur des anciens bulletins sans modifier la base. Les feuilles sont
+regroupées automatiquement par `ref_alerte` :
 
 ```powershell
-.\.venv\Scripts\python.exe backend\manage.py import_bulletins_excel "C:\chemin\anciens-bulletins.xlsx" --user-email "soc@local.test" --default-structure-code "STRUCTURE"
+.\.venv\Scripts\python.exe backend\manage.py import_legacy_bulletins_excel "C:\chemin\anciens-bulletins.xlsx" --user-email "soc@local.test" --default-structure-code "STRUCTURE" --dry-run
+```
+
+Après contrôle des rejets, effectuer l'import réel sur une sauvegarde de la base :
+
+```powershell
+.\.venv\Scripts\python.exe backend\manage.py import_legacy_bulletins_excel "C:\chemin\anciens-bulletins.xlsx" --user-email "soc@local.test" --default-structure-code "STRUCTURE"
 ```
 
 Afficher l'aide exacte d'une commande :

@@ -1,5 +1,6 @@
 from pathlib import Path
 from io import StringIO
+import tempfile
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -29,7 +30,10 @@ from .models import (
     PeerObservationRisk,
     RecommendationCatalog,
     RiskCatalog,
+    RiskIndicator,
     RiskProfile,
+    RiskProfileIndicator,
+    RiskProfilePortService,
     Structure,
     User,
 )
@@ -65,10 +69,93 @@ from .services.ip_reputation.clients import ReputationClientResult
 from .services.peer_observations import sync_peer_observations
 from .services.jobs.tasks import execute_background_job
 from .services.jobs.supervisor import WorkerHeartbeat, worker_status
+from .services.risk_profiles import import_risk_profiles_catalog
+from .serializers.bulletin.serializer import BulletinAssistantDraftInputSerializer
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 TEST_MEDIA_ROOT = WORKSPACE_ROOT / "backend" / "media_test"
+
+
+class RiskProfileCatalogImportTests(TestCase):
+    def test_import_is_idempotent_and_expands_abbreviated_ports(self):
+        content = (
+            "ACTIVITÉS;PORTS/SERVICES;RISQUES;IMPACTS;IOCS;RECOMMANDATIONS;CRITICITÉ\n"
+            "DDoS;3389 (RDP), 5985/86 (WinRM);Accès distant;Compromission de poste;"
+            "Connexion depuis réseau externe;Activer VPN et NLA;Élevée\n"
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", encoding="utf-8", delete=False) as handle:
+            handle.write(content)
+            path = Path(handle.name)
+        self.addCleanup(path.unlink, missing_ok=True)
+
+        first = import_risk_profiles_catalog(path)
+        second = import_risk_profiles_catalog(path)
+
+        self.assertEqual(first["created"], 1)
+        self.assertEqual(second["updated"], 1)
+        self.assertEqual(RiskProfile.objects.count(), 1)
+        profile = RiskProfile.objects.get()
+        self.assertEqual(profile.activity, "DDoS")
+        self.assertEqual(
+            list(profile.port_services.values_list("port", flat=True)),
+            [3389, 5985, 5986],
+        )
+        self.assertEqual(profile.indicator_links.get().indicator.name, "Connexion depuis réseau externe")
+
+
+class BulletinAssistantTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="assistant@example.com",
+            password="a-long-test-password",
+            role=UserRole.ANALYST,
+        )
+        self.structure = Structure.objects.create(name="Structure assistant", code="assistant")
+        self.network = Network.objects.create(structure=self.structure, name="Réseau assistant")
+        self.reputation = IPReputation.objects.create(
+            ip_address="203.0.113.8",
+            verdict=ReputationVerdict.MALICIOUS,
+            score=92,
+            country="CA",
+        )
+        self.observation = PeerObservation.objects.create(
+            peer_reputation=self.reputation,
+            network=self.network,
+            host_ip="10.0.0.10",
+            host_port=22,
+            host_service="ssh",
+            flow_count=4,
+            total_bytes=2048,
+            total_duration_seconds=300,
+        )
+        self.profile = RiskProfile.objects.create(
+            activity="DDoS",
+            name="Attaque par brute force",
+            impact="Accès non autorisé",
+            recommendation="Sécuriser les accès SSH",
+            default_severity=BulletinSeverity.HIGH,
+        )
+        RiskProfilePortService.objects.create(risk_profile=self.profile, port=22, service="SSH")
+        self.indicator = RiskIndicator.objects.create(name="Tentatives répétées de connexion SSH")
+        RiskProfileIndicator.objects.create(risk_profile=self.profile, indicator=self.indicator)
+
+    def test_three_field_selection_creates_snapshot_bulletin_draft(self):
+        serializer = BulletinAssistantDraftInputSerializer(data={
+            "peer_ip": "203.0.113.8",
+            "host_port": 22,
+            "indicator_id": self.indicator.id,
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        bulletin, duplicates = create_bulletin_from_findings(serializer.validated_data, self.user)
+
+        self.assertFalse(duplicates)
+        self.assertEqual(bulletin.status, "draft")
+        finding = bulletin.findings.get()
+        self.assertEqual(finding.peer_ip_snapshot, "203.0.113.8")
+        self.assertEqual(finding.host_port_snapshot, 22)
+        self.assertEqual(finding.risk_activity_snapshot, "DDoS")
+        self.assertEqual(finding.ioc_snapshot, "Tentatives répétées de connexion SSH")
 
 
 class CoreModelTests(TestCase):
@@ -1064,6 +1151,23 @@ class MaliciousCommunicationsAnalysisTests(TestCase):
         self.assertEqual(imported["totals"]["malicious_peers"], 1)
         self.assertEqual(dated["count"], 1)
         self.assertEqual(dated["results"][0]["total_bytes"], 20_000)
+
+    def test_country_falls_back_to_peer_location_from_flow(self):
+        reputation = IPReputation.objects.get(ip_address="198.51.100.10")
+        reputation.country = ""
+        reputation.save(update_fields=("country", "updated_at"))
+        self.flow_a.dst_location = "France"
+        self.flow_a.save(update_fields=("dst_location",))
+
+        result = malicious_communications({
+            "scope": "structure",
+            "structure_id": str(self.structure.id),
+            "peer_ip": "198.51.100.10",
+            "country": "France",
+        })
+
+        self.assertEqual(result["count"], 1)
+        self.assertTrue(all(row["peer_country"] == "France" for row in result["results"]))
 
 
 class IPReputationTests(TestCase):

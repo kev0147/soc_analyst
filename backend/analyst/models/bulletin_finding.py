@@ -24,6 +24,8 @@ class BulletinFinding(models.Model):
         "reputation_score_snapshot",
         "reputation_results_snapshot",
         "risk_name_snapshot",
+        "risk_activity_snapshot",
+        "ioc_snapshot",
         "impact_snapshot",
         "recommendation_snapshot",
     )
@@ -41,6 +43,13 @@ class BulletinFinding(models.Model):
         "analyst.RiskProfile",
         on_delete=models.PROTECT,
         related_name="bulletin_findings",
+    )
+    risk_indicator = models.ForeignKey(
+        "analyst.RiskIndicator",
+        on_delete=models.PROTECT,
+        related_name="bulletin_findings",
+        null=True,
+        blank=True,
     )
     severity = models.CharField(max_length=16, choices=BulletinSeverity.choices, blank=True)
     peer_ip_snapshot = models.GenericIPAddressField(protocol="IPv4")
@@ -66,6 +75,8 @@ class BulletinFinding(models.Model):
     reputation_score_snapshot = models.FloatField(null=True, blank=True)
     reputation_results_snapshot = models.JSONField(default=list, blank=True)
     risk_name_snapshot = models.CharField(max_length=150, blank=True)
+    risk_activity_snapshot = models.CharField(max_length=150, blank=True)
+    ioc_snapshot = models.TextField(blank=True)
     impact_snapshot = models.TextField(blank=True)
     recommendation_snapshot = models.TextField(blank=True)
     note = models.TextField(blank=True)
@@ -117,6 +128,8 @@ class BulletinFinding(models.Model):
             ).order_by("source")
         ]
         self.risk_name_snapshot = self.risk_profile.name
+        self.risk_activity_snapshot = self.risk_profile.activity
+        self.ioc_snapshot = self.risk_indicator.name if self.risk_indicator_id else ""
         self.severity = self.severity or self.risk_profile.default_severity
         self.impact_snapshot = self.impact_snapshot or self.risk_profile.impact
         self.recommendation_snapshot = self.recommendation_snapshot or self.risk_profile.recommendation
@@ -128,13 +141,15 @@ class BulletinFinding(models.Model):
             original = type(self).objects.only(
                 "peer_observation_id",
                 "risk_profile_id",
+                "risk_indicator_id",
                 *self.SNAPSHOT_FIELDS,
             ).get(pk=self.pk)
             if (
                 original.peer_observation_id != self.peer_observation_id
                 or original.risk_profile_id != self.risk_profile_id
+                or original.risk_indicator_id != self.risk_indicator_id
             ):
-                raise ValueError("L'observation et le profil de risque d'un constat existant sont immuables.")
+                raise ValueError("L'observation, le profil de risque et l'IOC d'un constat existant sont immuables.")
             for field in self.SNAPSHOT_FIELDS:
                 setattr(self, field, getattr(original, field))
         return super().save(*args, **kwargs)

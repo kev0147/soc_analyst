@@ -6,6 +6,7 @@ from analyst.models import (
     PeerObservation,
     RecommendationCatalog,
     RiskCatalog,
+    RiskIndicator,
     RiskProfile,
     Structure,
 )
@@ -70,6 +71,9 @@ class BulletinSerializer(serializers.ModelSerializer):
                 "reputation_results": finding.reputation_results_snapshot,
                 "risk_profile_id": finding.risk_profile_id,
                 "risk_name": finding.risk_name_snapshot,
+                "risk_activity": finding.risk_activity_snapshot,
+                "risk_indicator_id": finding.risk_indicator_id,
+                "ioc": finding.ioc_snapshot,
                 "severity": finding.severity,
                 "impact": finding.impact_snapshot,
                 "recommendation": finding.recommendation_snapshot,
@@ -175,4 +179,83 @@ class BulletinFromFindingsInputSerializer(serializers.Serializer):
                 {"peer_observation_ids": "Toutes les observations doivent appartenir à la structure du bulletin."}
             )
 
+        return attrs
+
+
+class BulletinAssistantMatchInputSerializer(serializers.Serializer):
+    peer_ip = serializers.IPAddressField(protocol="IPv4")
+    host_port = serializers.IntegerField(min_value=0, max_value=65535)
+    indicator_id = serializers.PrimaryKeyRelatedField(
+        queryset=RiskIndicator.objects.filter(is_active=True),
+        source="risk_indicator",
+    )
+    structure_id = serializers.PrimaryKeyRelatedField(
+        queryset=Structure.objects.filter(is_active=True),
+        source="structure",
+        required=False,
+    )
+
+
+class BulletinAssistantDraftInputSerializer(BulletinAssistantMatchInputSerializer):
+    risk_profile_id = serializers.PrimaryKeyRelatedField(
+        queryset=RiskProfile.objects.filter(is_active=True),
+        source="risk_profile",
+        required=False,
+    )
+    external_reference = serializers.CharField(required=False, allow_blank=True, max_length=128)
+    force_duplicate = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        peer_ip = attrs["peer_ip"]
+        host_port = attrs["host_port"]
+        indicator = attrs["risk_indicator"]
+        structure = attrs.get("structure")
+
+        observations = PeerObservation.objects.select_related(
+            "network", "network__structure", "peer_reputation"
+        ).filter(peer_reputation__ip_address=peer_ip, host_port=host_port)
+        if structure:
+            observations = observations.filter(network__structure=structure)
+        observations = list(observations)
+        if not observations:
+            raise serializers.ValidationError(
+                {"peer_ip": "Aucune observation ne correspond à cette peer IP et à ce port hôte."}
+            )
+
+        structure_ids = {item.network.structure_id for item in observations}
+        if not structure and len(structure_ids) > 1:
+            raise serializers.ValidationError(
+                {"structure_id": "Cette sélection existe dans plusieurs structures. Choisissez la structure."}
+            )
+        if not structure:
+            structure = observations[0].network.structure
+
+        profiles = RiskProfile.objects.filter(
+            is_active=True,
+            port_services__port=host_port,
+            indicator_links__indicator=indicator,
+        ).distinct()
+        selected_profile = attrs.get("risk_profile")
+        if selected_profile and not profiles.filter(pk=selected_profile.pk).exists():
+            raise serializers.ValidationError(
+                {"risk_profile_id": "Ce profil n'est pas associé au port et à l'IOC sélectionnés."}
+            )
+        if not selected_profile:
+            profile_ids = list(profiles.values_list("id", flat=True))
+            if not profile_ids:
+                raise serializers.ValidationError(
+                    {"indicator_id": "Aucun profil de risque ne correspond à ce port et à cet IOC."}
+                )
+            if len(profile_ids) > 1:
+                raise serializers.ValidationError(
+                    {"risk_profile_id": "Plusieurs risques correspondent. Choisissez le profil de risque."}
+                )
+            selected_profile = profiles.get(pk=profile_ids[0])
+
+        attrs["structure"] = structure
+        attrs["peer_observations"] = observations
+        attrs["risk_profiles"] = [selected_profile]
+        attrs.pop("risk_profile", None)
+        attrs.pop("peer_ip", None)
+        attrs.pop("host_port", None)
         return attrs

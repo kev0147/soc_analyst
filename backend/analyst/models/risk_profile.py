@@ -5,9 +5,11 @@ from .choices import BulletinSeverity
 
 
 class RiskProfile(TimestampedModel):
-    name = models.CharField(max_length=150, unique=True)
+    activity = models.CharField(max_length=150, blank=True, db_index=True)
+    name = models.CharField(max_length=150)
     impact = models.TextField()
     recommendation = models.TextField()
+    source_key = models.CharField(max_length=64, unique=True, null=True, blank=True, editable=False)
     default_severity = models.CharField(
         max_length=16,
         choices=BulletinSeverity.choices,
