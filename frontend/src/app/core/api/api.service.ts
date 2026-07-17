@@ -6,6 +6,9 @@ import {
   BackgroundJob,
   CatalogItem,
   DashboardOverview,
+  DailyFlowAggregate,
+  DetectionHit,
+  DetectionRule,
   Flow,
   FlowImport,
   IpAnalysisRecord,
@@ -181,6 +184,43 @@ export class ApiService {
     return this.http.get<WorkerLogs>(`${this.baseUrl}/workers/logs/`, {
       params: this.params({ lines }),
     });
+  }
+
+  detectionRules(params: QueryParams = {}): Observable<PaginatedResponse<DetectionRule>> {
+    return this.http.get<PaginatedResponse<DetectionRule>>(`${this.baseUrl}/detection-rules/`, {
+      params: this.params(params),
+    });
+  }
+
+  detectionHits(params: QueryParams = {}): Observable<PaginatedResponse<DetectionHit>> {
+    return this.http.get<PaginatedResponse<DetectionHit>>(`${this.baseUrl}/detection-hits/`, {
+      params: this.params(params),
+    });
+  }
+
+  launchDetection(payload: Record<string, unknown>): Observable<{ job: BackgroundJob; already_queued: boolean }> {
+    return this.http.post<{ job: BackgroundJob; already_queued: boolean }>(`${this.baseUrl}/detection-hits/run/`, payload);
+  }
+
+  updateDetectionHitStatus(id: number, status: DetectionHit['status']): Observable<DetectionHit> {
+    return this.http.post<DetectionHit>(`${this.baseUrl}/detection-hits/${id}/status/`, { status });
+  }
+
+  dailyFlowAggregates(params: QueryParams = {}): Observable<PaginatedResponse<DailyFlowAggregate>> {
+    return this.http.get<PaginatedResponse<DailyFlowAggregate>>(`${this.baseUrl}/daily-flow-aggregates/`, {
+      params: this.params(params),
+    });
+  }
+
+  launchDailyAggregation(payload: {
+    date_from: string;
+    date_to: string;
+    structure_id?: number;
+  }): Observable<{ job: BackgroundJob; already_queued: boolean }> {
+    return this.http.post<{ job: BackgroundJob; already_queued: boolean }>(
+      `${this.baseUrl}/daily-flow-aggregates/run/`,
+      payload,
+    );
   }
 
   private params(values: QueryParams): HttpParams {

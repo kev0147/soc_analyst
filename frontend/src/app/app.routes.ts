@@ -12,6 +12,7 @@ import { BulletinCreatePageComponent } from './pages/bulletin-create/bulletin-cr
 import { AnalysisPageComponent } from './pages/analysis/analysis-page.component';
 import { StructuresPageComponent } from './pages/structures/structures-page.component';
 import { WorkersPageComponent } from './pages/workers/workers-page.component';
+import { DetectionsPageComponent } from './pages/detections/detections-page.component';
 
 export const routes: Routes = [
   { path: 'login', component: LoginPageComponent },
@@ -25,6 +26,7 @@ export const routes: Routes = [
       { path: 'imports', component: ImportsPageComponent },
       { path: 'flows', component: FlowsPageComponent },
       { path: 'analysis', component: AnalysisPageComponent },
+      { path: 'detections', component: DetectionsPageComponent },
       { path: 'ip-analysis', component: IpAnalysisPageComponent },
       { path: 'soc-peers', component: SocPeersPageComponent },
       { path: 'bulletins', component: BulletinsPageComponent },

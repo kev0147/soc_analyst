@@ -19,6 +19,9 @@ from .models import (
     BulletinResponse,
     BulletinTypeCatalog,
     BackgroundJob,
+    DailyFlowAggregate,
+    DetectionHit,
+    DetectionRule,
     Flow,
     FlowImport,
     FlowImportItem,
@@ -69,8 +72,11 @@ from .services.ip_reputation.clients import ReputationClientResult
 from .services.peer_observations import sync_peer_observations
 from .services.jobs.tasks import execute_background_job
 from .services.jobs.supervisor import WorkerHeartbeat, worker_status
+from .services.daily_aggregates import build_daily_flow_aggregates
+from .services.detections import run_detections
 from .services.risk_profiles import import_risk_profiles_catalog
 from .serializers.bulletin.serializer import BulletinAssistantDraftInputSerializer
+from .serializers import DailyFlowAggregateSerializer, DetectionHitSerializer
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
@@ -1029,6 +1035,143 @@ class AnalyticsDashboardTests(TestCase):
         self.assertEqual(overview["top_hosts_with_malicious_by_duration"][0]["host_ip"], "10.0.0.10")
 
 
+class DetectionAndDailyAggregateTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="detection@example.com",
+            password="a-long-test-password",
+            role=UserRole.ANALYST,
+        )
+        self.structure = Structure.objects.create(name="Structure détection", code="DET")
+        self.network = Network.objects.create(structure=self.structure, name="Réseau détection")
+        NetworkCIDR.objects.create(network=self.network, cidr="10.0.0.0/24")
+        IPReputation.objects.create(
+            ip_address="203.0.113.10",
+            verdict=ReputationVerdict.MALICIOUS,
+            score=98,
+            country="FR",
+        )
+        self._flow(
+            "detect-ssh",
+            "203.0.113.10",
+            "10.0.0.1",
+            src_port=45000,
+            dst_port=22,
+            service="ssh",
+            duration_seconds=2000,
+            total_bytes=20_000_000,
+        )
+        for index in range(50):
+            self._flow(
+                f"detect-repeat-{index}",
+                "198.51.100.20",
+                "10.0.0.2",
+                src_port=46000 + index,
+                dst_port=443,
+                service="https",
+                duration_seconds=2,
+                total_bytes=100,
+            )
+        for index in range(5):
+            self._flow(
+                f"detect-multi-{index}",
+                "192.0.2.30",
+                f"10.0.0.{10 + index}",
+                src_port=47000 + index,
+                dst_port=80,
+                service="http",
+                duration_seconds=3,
+                total_bytes=200,
+            )
+
+    def _flow(self, sna_flow_id, src_ip, dst_ip, **kwargs):
+        return Flow.objects.create(
+            network=self.network,
+            sna_flow_id=sna_flow_id,
+            started_at="2026-07-01T08:00:00Z",
+            mapping_method=MappingMethod.ORIENTATION,
+            direction=FlowDirection.INBOUND,
+            src_ip=src_ip,
+            dst_ip=dst_ip,
+            protocol="TCP",
+            total_packets=2,
+            **kwargs,
+        )
+
+    def test_default_rules_detect_and_update_five_soc_scenarios_idempotently(self):
+        self.assertEqual(DetectionRule.objects.filter(is_active=True).count(), 5)
+
+        first = run_detections({"scope": "structure", "structure_id": self.structure.id})
+        second = run_detections({"scope": "structure", "structure_id": self.structure.id})
+
+        self.assertEqual(first["created_count"], 5)
+        self.assertEqual(second["created_count"], 0)
+        self.assertEqual(second["updated_count"], 5)
+        self.assertEqual(DetectionHit.objects.count(), 5)
+        self.assertEqual(
+            set(DetectionHit.objects.values_list("rule__code", flat=True)),
+            {
+                "long-ssh",
+                "malicious-high-volume",
+                "repeated-peer",
+                "sensitive-port",
+                "multi-host-peer",
+            },
+        )
+        malicious = DetectionHit.objects.get(rule__code="malicious-high-volume")
+        self.assertEqual(malicious.host_ip, "10.0.0.1")
+        self.assertEqual(malicious.peer_ip, "203.0.113.10")
+        self.assertEqual(malicious.reputation_score, 98)
+        self.assertEqual(malicious.evidence["sample_sna_flow_ids"], ["detect-ssh"])
+        serialized = DetectionHitSerializer(malicious).data
+        self.assertEqual(serialized["rule_code"], "malicious-high-volume")
+        self.assertEqual(serialized["structure_code"], "DET")
+
+    def test_daily_aggregates_preserve_soc_dimensions_without_deleting_flows(self):
+        result = build_daily_flow_aggregates(
+            date_from="2026-07-01",
+            date_to="2026-07-01",
+            structure_id=self.structure.id,
+        )
+
+        self.assertEqual(result["flow_count"], 56)
+        self.assertEqual(result["aggregate_count"], 7)
+        self.assertEqual(result["flows_deleted"], 0)
+        self.assertEqual(Flow.objects.count(), 56)
+        self.assertEqual(DailyFlowAggregate.objects.count(), 7)
+        ssh = DailyFlowAggregate.objects.get(peer_ip="203.0.113.10")
+        self.assertEqual(ssh.host_ip, "10.0.0.1")
+        self.assertEqual(ssh.host_port, 22)
+        self.assertEqual(ssh.total_bytes, 20_000_000)
+        self.assertEqual(ssh.reputation_verdict, ReputationVerdict.MALICIOUS)
+        self.assertEqual(DailyFlowAggregateSerializer(ssh).data["network_name"], "Réseau détection")
+
+    def test_detection_and_aggregation_endpoints_enqueue_worker_jobs(self):
+        self.client.force_login(self.user)
+        rules = self.client.get("/api/v1/detection-rules/", {"is_active": "true"})
+        detection = self.client.post(
+            "/api/v1/detection-hits/run/",
+            {"scope": "structure", "structure_id": self.structure.id},
+            content_type="application/json",
+        )
+        aggregation = self.client.post(
+            "/api/v1/daily-flow-aggregates/run/",
+            {
+                "date_from": "2026-07-01",
+                "date_to": "2026-07-01",
+                "structure_id": self.structure.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(rules.status_code, 200)
+        self.assertEqual(rules.json()["count"], 5)
+        self.assertEqual(detection.status_code, 202)
+        self.assertEqual(detection.json()["job"]["kind"], BackgroundJobKind.DETECTION)
+        self.assertEqual(aggregation.status_code, 202)
+        self.assertEqual(aggregation.json()["job"]["kind"], BackgroundJobKind.DAILY_AGGREGATION)
+
+
 class MaliciousCommunicationsAnalysisTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -1108,6 +1251,13 @@ class MaliciousCommunicationsAnalysisTests(TestCase):
         )
 
     def test_structure_scope_correlates_hosts_peers_ports_countries_and_totals(self):
+        observation = PeerObservation.objects.create(
+            peer_reputation=IPReputation.objects.get(ip_address="203.0.113.20"),
+            network=self.network,
+            host_ip="10.0.0.10",
+            host_port=22,
+            host_service="ssh",
+        )
         result = malicious_communications({
             "scope": "structure",
             "structure_id": str(self.structure.id),
@@ -1126,6 +1276,9 @@ class MaliciousCommunicationsAnalysisTests(TestCase):
         self.assertEqual(first["reputation_score"], 80)
         self.assertEqual(first["peer_country"], "CA")
         self.assertEqual(first["total_duration_seconds"], 200)
+        self.assertEqual(first["structure_id"], self.structure.id)
+        self.assertEqual(first["structure_code"], "CORR")
+        self.assertEqual(first["peer_observation_ids"], [observation.id])
 
     def test_import_and_date_scopes_and_peer_filters(self):
         flow_import = FlowImport.objects.create(

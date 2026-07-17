@@ -160,10 +160,15 @@ export class BulletinCreatePageComponent implements OnInit {
   observationSearch = '';
 
   ngOnInit() {
-    const ids = this.route.snapshot.queryParamMap.get('observations');
+    const queryParams = this.route.snapshot.queryParamMap;
+    const ids = queryParams.get('observations');
     if (ids) {
       this.selectedObservationIds.set(ids.split(',').map((value) => Number(value)).filter(Boolean));
     }
+    const peer = queryParams.get('peer');
+    if (peer) this.observationSearch = peer;
+    const structureId = Number(queryParams.get('structure'));
+    if (structureId) this.structureId = structureId;
     this.api.networks().subscribe((data) => {
       this.networks.set(data.results);
       this.syncStructureFromObservations();
@@ -177,7 +182,11 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   loadObservations() {
-    this.api.peerObservationSuggestions({ peer_ip: this.observationSearch, limit: 50 }).subscribe((data) => {
+    this.api.peerObservationSuggestions({
+      peer_ip: this.observationSearch,
+      structure_id: this.structureId || null,
+      limit: 50,
+    }).subscribe((data) => {
       this.observations.set(data.results);
       this.syncStructureFromObservations();
     });

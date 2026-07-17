@@ -3,10 +3,12 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
-import { PeerObservation, TopPeer } from '../../core/api/api.types';
+import { PeerObservation, Structure, TopPeer } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
 
 interface SocPeerFilters {
+  peer_ip: string;
+  structure_id: number | null;
   date_from: string;
   date_to: string;
   verdict: string;
@@ -26,8 +28,8 @@ interface SocPeerFilters {
     <div class="page">
       <div class="page-title">
         <div>
-          <h1>Top peers & suggestions SOC</h1>
-          <p>Identifier les IP externes actives, malveillantes ou longues à communiquer avec le réseau.</p>
+          <h1>Peers observées</h1>
+          <p>Rechercher une IP externe observée, consulter ses communications et la sélectionner pour un bulletin.</p>
         </div>
         <button class="btn" (click)="goCreate()" [disabled]="selectedObservationIds.size === 0">
           Créer bulletin ({{ selectedObservationIds.size }})
@@ -35,6 +37,24 @@ interface SocPeerFilters {
       </div>
 
       <section class="card filters">
+        <label class="field">
+          <span>Adresse IP peer</span>
+          <input
+            class="input"
+            [(ngModel)]="filters.peer_ip"
+            placeholder="IP exacte, ex. 203.0.113.10"
+            (keyup.enter)="load()"
+          />
+        </label>
+        <label class="field">
+          <span>Structure</span>
+          <select class="select" [(ngModel)]="filters.structure_id">
+            <option [ngValue]="null">Toutes les structures</option>
+            @for (structure of structures(); track structure.id) {
+              <option [ngValue]="structure.id">{{ structure.code }} — {{ structure.name }}</option>
+            }
+          </select>
+        </label>
         <label class="field">
           <span>Début période</span>
           <input class="input" type="datetime-local" [(ngModel)]="filters.date_from" />
@@ -75,11 +95,11 @@ interface SocPeerFilters {
             <option value="last_seen_at">Dernière activité</option>
           </select>
         </label>
-        <button class="btn secondary" (click)="load()">Filtrer</button>
+        <button class="btn secondary" (click)="load()">Rechercher</button>
       </section>
 
       <section class="card">
-        <h2>Top peers</h2>
+        <h2>Communications agrégées par peer</h2>
         <div class="table-wrap">
           <table>
             <thead>
@@ -121,8 +141,8 @@ interface SocPeerFilters {
       </section>
 
       <section class="card">
-        <h2>Suggestions à signaler</h2>
-        <p class="muted">Sélectionne une ou plusieurs observations, puis crée un bulletin depuis ces observations.</p>
+        <h2>Observations sélectionnables pour un bulletin</h2>
+        <p class="muted">Chaque ligne correspond à une communication peer → hôte/port. Sélectionne les lignes utiles avant de créer le bulletin.</p>
         <div class="table-wrap">
           <table>
             <thead>
@@ -168,11 +188,14 @@ export class SocPeersPageComponent implements OnInit {
   private readonly router = inject(Router);
   readonly topPeers = signal<TopPeer[]>([]);
   readonly suggestions = signal<PeerObservation[]>([]);
+  readonly structures = signal<Structure[]>([]);
   readonly bytes = formatBytes;
   readonly duration = formatDuration;
   readonly selectedObservationIds = new Set<number>();
 
   filters: SocPeerFilters = {
+    peer_ip: '',
+    structure_id: null,
     date_from: '',
     date_to: '',
     verdict: '',
@@ -180,11 +203,12 @@ export class SocPeersPageComponent implements OnInit {
     service: '',
     min_duration: null,
     sort: 'total_duration_seconds',
-    suspicious_only: true,
+    suspicious_only: false,
     limit: 25,
   };
 
   ngOnInit() {
+    this.api.structures({ is_active: true }).subscribe((data) => this.structures.set(data.results));
     this.load();
   }
 

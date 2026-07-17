@@ -1,10 +1,12 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ApiService, QueryParams } from '../../core/api/api.service';
 import {
   FlowImport,
   MaliciousCommunicationAnalysis,
+  MaliciousCommunicationRow,
   Structure,
 } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
@@ -118,6 +120,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
             <table>
               <thead>
                 <tr>
+                  <th>Structure</th>
                   <th>Hôte</th>
                   <th>Ports hôte ciblés/observés</th>
                   <th>IP malveillante</th>
@@ -127,11 +130,13 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                   <th>Trafic cumulé</th>
                   <th>Durée cumulée</th>
                   <th>Dernière observation</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                @for (row of data.results; track row.host_ip + '-' + row.malicious_ip) {
+                @for (row of data.results; track row.structure_id + '-' + row.host_ip + '-' + row.malicious_ip) {
                   <tr>
+                    <td>{{ row.structure_code }}</td>
                     <td>{{ row.host_ip }}</td>
                     <td>{{ row.host_ports.join(', ') || '-' }}</td>
                     <td>{{ row.malicious_ip }}</td>
@@ -141,9 +146,19 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                     <td>{{ bytes(row.total_bytes) }}</td>
                     <td>{{ duration(row.total_duration_seconds) }}</td>
                     <td>{{ row.last_seen_at ? (row.last_seen_at | date:'medium') : '-' }}</td>
+                    <td>
+                      <button
+                        class="btn secondary action"
+                        (click)="addToBulletin(row)"
+                        [disabled]="row.peer_observation_ids.length === 0"
+                        [title]="row.peer_observation_ids.length ? 'Préremplir un bulletin avec cette peer' : 'Aucune observation synchronisée pour cette communication'"
+                      >
+                        Ajouter au bulletin
+                      </button>
+                    </td>
                   </tr>
                 } @empty {
-                  <tr><td colspan="9"><div class="empty">Aucune communication avec une IP malveillante dans ce périmètre.</div></td></tr>
+                  <tr><td colspan="11"><div class="empty">Aucune communication avec une IP malveillante dans ce périmètre.</div></td></tr>
                 }
               </tbody>
             </table>
@@ -155,10 +170,12 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
   styles: `
     .metric span { color: var(--muted); }
     .metric strong { display: block; margin-top: 8px; font-size: 28px; }
+    .action { white-space: nowrap; }
   `,
 })
 export class AnalysisPageComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
   readonly structures = signal<Structure[]>([]);
   readonly imports = signal<FlowImport[]>([]);
   readonly analysis = signal<MaliciousCommunicationAnalysis | null>(null);
@@ -218,6 +235,20 @@ export class AnalysisPageComponent implements OnInit {
         const detail = error?.error;
         const first = detail && typeof detail === 'object' ? Object.values(detail)[0] : null;
         this.message.set(Array.isArray(first) ? String(first[0]) : String(first || 'Analyse impossible.'));
+      },
+    });
+  }
+
+  addToBulletin(row: MaliciousCommunicationRow) {
+    if (!row.peer_observation_ids.length) {
+      this.message.set('Aucune observation synchronisée pour cette communication. Lance d’abord une analyse IP.');
+      return;
+    }
+    this.router.navigate(['/bulletins/new'], {
+      queryParams: {
+        observations: row.peer_observation_ids.join(','),
+        peer: row.malicious_ip,
+        structure: row.structure_id,
       },
     });
   }

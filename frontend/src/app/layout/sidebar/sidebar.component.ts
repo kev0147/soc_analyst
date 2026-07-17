@@ -68,6 +68,7 @@ export class SidebarComponent {
     { path: '/imports', label: 'Imports CSV', exact: true },
     { path: '/flows', label: 'Flows', exact: true },
     { path: '/analysis', label: 'Analyse SOC', exact: true },
+    { path: '/detections', label: 'Détections', exact: true },
     { path: '/ip-analysis', label: 'Analyse IP', exact: true },
     { path: '/workers', label: 'Workers', exact: true },
     { path: '/soc-peers', label: 'Peers', exact: true },

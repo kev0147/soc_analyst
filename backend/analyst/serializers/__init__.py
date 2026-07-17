@@ -9,6 +9,9 @@ from .bulletin_response import BulletinResponseSerializer
 from .bulletin_risk import BulletinRiskSerializer
 from .bulletin_type import BulletinTypeSerializer
 from .bulletin_type_catalog import BulletinTypeCatalogSerializer
+from .daily_flow_aggregate import DailyFlowAggregateSerializer
+from .detection_hit import DetectionHitSerializer
+from .detection_rule import DetectionRuleSerializer
 from .flow import FlowSerializer
 from .flow_import import FlowImportSerializer
 from .flow_import_item import FlowImportItemSerializer

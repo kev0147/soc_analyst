@@ -31,7 +31,7 @@ export interface FlowImport {
 
 export interface BackgroundJob {
   id: string;
-  kind: 'flow_import' | 'ip_reputation';
+  kind: 'flow_import' | 'ip_reputation' | 'detection' | 'daily_aggregation';
   status: 'queued' | 'running' | 'completed' | 'failed';
   status_message: string;
   progress_current: number;
@@ -154,6 +154,9 @@ export interface MaliciousHostDashboardStat {
 }
 
 export interface MaliciousCommunicationRow {
+  structure_id: number;
+  structure_code: string;
+  structure_name: string;
   host_ip: string;
   host_ports: number[];
   malicious_ip: string;
@@ -167,6 +170,7 @@ export interface MaliciousCommunicationRow {
   total_duration_seconds: number;
   first_seen_at: string | null;
   last_seen_at: string | null;
+  peer_observation_ids: number[];
 }
 
 export interface MaliciousCommunicationAnalysis {
@@ -304,4 +308,73 @@ export interface IpAnalysisRecord {
     is_stale: boolean;
     freshness_status: 'never_analyzed' | 'fresh' | 'stale' | 'error' | 'unavailable';
   }>;
+}
+
+export interface DetectionRule {
+  id: number;
+  code: string;
+  name: string;
+  description: string;
+  rule_type: 'long_ssh' | 'malicious_high_volume' | 'repeated_peer' | 'sensitive_port' | 'multi_host_peer';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  parameters: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DetectionHit {
+  id: number;
+  rule: number;
+  rule_code: string;
+  rule_name: string;
+  structure: number;
+  structure_code: string;
+  structure_name: string;
+  network: number | null;
+  network_name: string | null;
+  status: 'open' | 'acknowledged' | 'dismissed';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  summary: string;
+  observation_date: string;
+  host_ip: string | null;
+  peer_ip: string | null;
+  host_port: number | null;
+  peer_port: number | null;
+  service: string;
+  peer_country: string;
+  reputation_verdict: 'malicious' | 'suspicious' | 'clean' | 'unknown';
+  reputation_score: number | null;
+  flow_count: number;
+  host_count: number;
+  total_bytes: number;
+  total_packets: number;
+  total_duration_seconds: number;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  evidence: Record<string, unknown>;
+}
+
+export interface DailyFlowAggregate {
+  id: number;
+  date: string;
+  structure: number;
+  structure_code: string;
+  network: number;
+  network_name: string;
+  host_ip: string;
+  peer_ip: string;
+  host_port: number | null;
+  peer_port: number | null;
+  protocol: string;
+  service: string;
+  direction: string;
+  peer_country: string;
+  reputation_verdict: string;
+  reputation_score: number | null;
+  flow_count: number;
+  total_bytes: number;
+  total_packets: number;
+  total_duration_seconds: number;
 }

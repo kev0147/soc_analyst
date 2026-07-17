@@ -1,7 +1,7 @@
 from django.db.models import Q
 from rest_framework.exceptions import ValidationError
 
-from analyst.models import Flow, FlowImport, IPReputation
+from analyst.models import Flow, FlowImport, IPReputation, PeerObservation
 from analyst.models.choices import ReputationVerdict
 from analyst.services.flows import apply_flow_filters
 
@@ -95,6 +95,7 @@ def malicious_communications(params) -> dict:
         peer_location = flow.src_location if src_is_malicious else flow.dst_location
         reputation = reputations[peer_ip]
         country = (reputation.country or peer_location or "").strip()
+        structure = flow.network.structure
 
         if host_filter and host_ip != host_filter:
             continue
@@ -108,8 +109,11 @@ def malicious_communications(params) -> dict:
         total_bytes = flow.total_bytes or 0
         duration = flow.duration_seconds or 0
         row = rows.setdefault(
-            (host_ip, peer_ip),
+            (structure.id, host_ip, peer_ip),
             {
+                "structure_id": structure.id,
+                "structure_code": structure.code,
+                "structure_name": structure.name,
                 "host_ip": host_ip,
                 "host_ports": set(),
                 "malicious_ip": peer_ip,
@@ -156,6 +160,38 @@ def malicious_communications(params) -> dict:
             "last_seen_at": row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
         })
 
+    observation_ids = {}
+    if results:
+        observations = PeerObservation.objects.filter(
+            network__structure_id__in={row["structure_id"] for row in results},
+            peer_reputation__ip_address__in={row["malicious_ip"] for row in results},
+            host_ip__in={row["host_ip"] for row in results},
+        ).values(
+            "id",
+            "network__structure_id",
+            "peer_reputation__ip_address",
+            "host_ip",
+            "host_port",
+        )
+        for observation in observations:
+            key = (
+                observation["network__structure_id"],
+                observation["host_ip"],
+                observation["peer_reputation__ip_address"],
+                observation["host_port"],
+            )
+            observation_ids.setdefault(key, []).append(observation["id"])
+
+    for row in results:
+        selected_ids = set()
+        ports = row["host_ports"] or [None]
+        for host_port in ports:
+            selected_ids.update(observation_ids.get(
+                (row["structure_id"], row["host_ip"], row["malicious_ip"], host_port),
+                [],
+            ))
+        row["peer_observation_ids"] = sorted(selected_ids)
+
     results.sort(
         key=lambda row: row[ordering_field] if row[ordering_field] is not None else -1,
         reverse=descending,
@@ -165,7 +201,7 @@ def malicious_communications(params) -> dict:
         "ordering": ordering,
         "count": len(results),
         "totals": {
-            "hosts": len({row["host_ip"] for row in results}),
+            "hosts": len({(row["structure_id"], row["host_ip"]) for row in results}),
             "malicious_peers": len({row["malicious_ip"] for row in results}),
             "correlations": len(results),
             "flows": sum(row["flow_count"] for row in results),

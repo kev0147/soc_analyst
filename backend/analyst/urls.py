@@ -133,6 +133,16 @@ from analyst.controllers.bulletin_finding.retrieve import BulletinFindingRetriev
 from analyst.controllers.bulletin_finding.create import BulletinFindingCreateController
 from analyst.controllers.bulletin_finding.update import BulletinFindingUpdateController
 from analyst.controllers.bulletin_finding.delete import BulletinFindingDeleteController
+from analyst.controllers.detection_rule.list import DetectionRuleListController
+from analyst.controllers.detection_rule.retrieve import DetectionRuleRetrieveController
+from analyst.controllers.detection_rule.create import DetectionRuleCreateController
+from analyst.controllers.detection_rule.update import DetectionRuleUpdateController
+from analyst.controllers.detection_hit.list import DetectionHitListController
+from analyst.controllers.detection_hit.retrieve import DetectionHitRetrieveController
+from analyst.controllers.detection_hit.update_status import DetectionHitStatusController
+from analyst.controllers.detection_hit.run import DetectionRunController
+from analyst.controllers.daily_flow_aggregate.list import DailyFlowAggregateListController
+from analyst.controllers.daily_flow_aggregate.run import DailyFlowAggregateRunController
 
 app_name = "analyst"
 
@@ -191,6 +201,16 @@ urlpatterns = [
     path("analytics/top-ports-protocols/", TopPortsProtocolsController.as_view(), name="top-ports-protocols"),
     path("analytics/malicious-communications/", MaliciousCommunicationsController.as_view(), name="malicious-communications"),
     path("dashboard/overview/", DashboardOverviewController.as_view(), name="dashboard-overview"),
+    path("detection-rules/", DetectionRuleListController.as_view(), name="detection-rule-list"),
+    path("detection-rules/create/", DetectionRuleCreateController.as_view(), name="detection-rule-create"),
+    path("detection-rules/<int:pk>/", DetectionRuleRetrieveController.as_view(), name="detection-rule-retrieve"),
+    path("detection-rules/<int:pk>/update/", DetectionRuleUpdateController.as_view(), name="detection-rule-update"),
+    path("detection-hits/", DetectionHitListController.as_view(), name="detection-hit-list"),
+    path("detection-hits/run/", DetectionRunController.as_view(), name="detection-hit-run"),
+    path("detection-hits/<int:pk>/", DetectionHitRetrieveController.as_view(), name="detection-hit-retrieve"),
+    path("detection-hits/<int:pk>/status/", DetectionHitStatusController.as_view(), name="detection-hit-status"),
+    path("daily-flow-aggregates/", DailyFlowAggregateListController.as_view(), name="daily-flow-aggregate-list"),
+    path("daily-flow-aggregates/run/", DailyFlowAggregateRunController.as_view(), name="daily-flow-aggregate-run"),
     path("flow-import-items/", FlowImportItemListController.as_view(), name="flow_import_item-list"),
     path("flow-import-items/<int:pk>/", FlowImportItemRetrieveController.as_view(), name="flow_import_item-retrieve"),
     path("bulletins/", BulletinListController.as_view(), name="bulletin-list"),

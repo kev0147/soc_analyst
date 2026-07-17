@@ -75,6 +75,8 @@ class ReputationStatus(models.TextChoices):
 class BackgroundJobKind(models.TextChoices):
     FLOW_IMPORT = "flow_import", "Import de flows"
     IP_REPUTATION = "ip_reputation", "Analyse de réputation IP"
+    DETECTION = "detection", "Détection SOC"
+    DAILY_AGGREGATION = "daily_aggregation", "Agrégation journalière"
 
 
 class BackgroundJobStatus(models.TextChoices):
@@ -82,3 +84,17 @@ class BackgroundJobStatus(models.TextChoices):
     RUNNING = "running", "En cours"
     COMPLETED = "completed", "Terminé"
     FAILED = "failed", "Échoué"
+
+
+class DetectionRuleType(models.TextChoices):
+    LONG_SSH = "long_ssh", "Communication SSH longue"
+    MALICIOUS_HIGH_VOLUME = "malicious_high_volume", "Volume important avec une IP malveillante"
+    REPEATED_PEER = "repeated_peer", "Connexions répétées vers une peer"
+    SENSITIVE_PORT = "sensitive_port", "Activité sur un port sensible"
+    MULTI_HOST_PEER = "multi_host_peer", "Peer en communication avec plusieurs hôtes"
+
+
+class DetectionHitStatus(models.TextChoices):
+    OPEN = "open", "Ouvert"
+    ACKNOWLEDGED = "acknowledged", "Pris en compte"
+    DISMISSED = "dismissed", "Ignoré"

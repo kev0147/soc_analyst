@@ -152,7 +152,7 @@ Ouvrir trois terminaux depuis la racine du projet.
 .\.venv\Scripts\python.exe backend\manage.py run_background_jobs
 ```
 
-Le worker traite les imports CSV et les analyses IP. Les jobs restent en file dans SQLite lorsqu'il est arrêté.
+Le worker traite les imports CSV, les analyses IP, les détections SOC et les agrégations journalières. Les jobs restent en file dans SQLite lorsqu'il est arrêté.
 
 Traiter uniquement la file actuelle puis arrêter le worker :
 

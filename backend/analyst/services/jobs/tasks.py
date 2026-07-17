@@ -10,6 +10,8 @@ from analyst.models import AuditEvent, BackgroundJob, FlowImport
 from analyst.models.choices import BackgroundJobKind, BackgroundJobStatus, ImportStatus
 from analyst.services.imports import confirm_flow_import
 from analyst.services.ip_reputation import run_reputation_analysis
+from analyst.services.daily_aggregates import build_daily_flow_aggregates
+from analyst.services.detections import run_detections
 
 
 def _audit(job: BackgroundJob, action: str, details: dict | None = None):
@@ -113,6 +115,20 @@ def _run(job: BackgroundJob) -> dict:
             tools=payload.get("tools"),
             limit=payload.get("limit", 50),
             force_refresh=payload.get("force_refresh", False),
+            progress_callback=lambda current, total, message: _progress(str(job.id), current, total, message),
+        )
+
+    if job.kind == BackgroundJobKind.DETECTION:
+        return run_detections(
+            job.payload,
+            progress_callback=lambda current, total, message: _progress(str(job.id), current, total, message),
+        )
+
+    if job.kind == BackgroundJobKind.DAILY_AGGREGATION:
+        return build_daily_flow_aggregates(
+            date_from=job.payload.get("date_from"),
+            date_to=job.payload.get("date_to"),
+            structure_id=job.payload.get("structure_id"),
             progress_callback=lambda current, total, message: _progress(str(job.id), current, total, message),
         )
 

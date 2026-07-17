@@ -9,6 +9,9 @@ from .bulletin_response import BulletinResponse
 from .bulletin_risk import BulletinRisk
 from .bulletin_type import BulletinType
 from .bulletin_type_catalog import BulletinTypeCatalog
+from .daily_flow_aggregate import DailyFlowAggregate
+from .detection_hit import DetectionHit
+from .detection_rule import DetectionRule
 from .flow import Flow
 from .flow_import import FlowImport
 from .flow_import_item import FlowImportItem
@@ -40,6 +43,9 @@ __all__ = [
     "BulletinRisk",
     "BulletinType",
     "BulletinTypeCatalog",
+    "DailyFlowAggregate",
+    "DetectionHit",
+    "DetectionRule",
     "Flow",
     "FlowImport",
     "FlowImportItem",
