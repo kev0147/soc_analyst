@@ -93,19 +93,46 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        # Un import asynchrone peut écrire pendant qu'une requête HTTP lit la BD.
-        # SQLite attend ce délai avant de conclure que la base est verrouillée.
-        'OPTIONS': {
-            'timeout': max(float(os.getenv('SQLITE_TIMEOUT_SECONDS', '60')), 1.0),
-            'transaction_mode': 'IMMEDIATE',
-            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;',
-        },
+DB_ENGINE = os.getenv("DB_ENGINE", "sqlite").strip().lower()
+if DB_ENGINE in {"postgres", "postgresql", "django.db.backends.postgresql"}:
+    postgres_settings = {
+        "NAME": os.getenv("DB_NAME", "").strip(),
+        "USER": os.getenv("DB_USER", "").strip(),
+        "PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "HOST": os.getenv("DB_HOST", "127.0.0.1").strip(),
+        "PORT": os.getenv("DB_PORT", "5432").strip(),
     }
-}
+    missing = [name for name in ("NAME", "USER", "PASSWORD") if not postgres_settings[name]]
+    if missing:
+        variables = ", ".join(f"DB_{name}" for name in missing)
+        raise ImproperlyConfigured(f"Variables PostgreSQL obligatoires manquantes : {variables}.")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            **postgres_settings,
+            "CONN_MAX_AGE": max(int(os.getenv("DB_CONN_MAX_AGE", "60")), 0),
+            "CONN_HEALTH_CHECKS": True,
+            "OPTIONS": {
+                "connect_timeout": max(int(os.getenv("DB_CONNECT_TIMEOUT", "10")), 1),
+            },
+        }
+    }
+elif DB_ENGINE in {"sqlite", "sqlite3", "django.db.backends.sqlite3"}:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+            # Un import asynchrone peut écrire pendant qu'une requête HTTP lit la BD.
+            # SQLite attend ce délai avant de conclure que la base est verrouillée.
+            "OPTIONS": {
+                "timeout": max(float(os.getenv("SQLITE_TIMEOUT_SECONDS", "60")), 1.0),
+                "transaction_mode": "IMMEDIATE",
+                "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+            },
+        }
+    }
+else:
+    raise ImproperlyConfigured("DB_ENGINE doit valoir sqlite ou postgresql.")
 
 
 # Password validation

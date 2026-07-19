@@ -5,7 +5,7 @@ from .models import (
     AuditEvent,
     Bulletin,
     BulletinFinding,
-    BulletinTypeCatalog,
+    ActivityCatalog,
     Flow,
     FlowImport,
     IPReputation,
@@ -45,7 +45,7 @@ admin.site.register(IPReputation)
 admin.site.register(IPReputationResult)
 admin.site.register(Bulletin)
 admin.site.register(BulletinFinding)
-admin.site.register(BulletinTypeCatalog)
+admin.site.register(ActivityCatalog)
 admin.site.register(RiskCatalog)
 admin.site.register(RiskProfile)
 admin.site.register(PeerObservation)

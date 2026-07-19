@@ -1,11 +1,13 @@
 from pathlib import Path
 from io import StringIO
+import ipaddress
 import tempfile
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 from django.core.management import call_command, CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.db.utils import OperationalError
 from django.test import RequestFactory, TestCase, override_settings
 
@@ -1368,6 +1370,49 @@ class IPReputationTests(TestCase):
 
         self.assertEqual([item.ip_address for item in candidates], ["198.51.100.25", "203.0.113.50"])
         self.assertEqual(candidates[0].analyzed_source_count, 0)
+
+    def test_candidate_ips_chunks_reputation_lookup_to_respect_database_parameter_limit(self):
+        for index in range(1, 21):
+            peer_ip = str(ipaddress.ip_address("192.0.2.0") + index)
+            Flow.objects.create(
+                network=self.network,
+                sna_flow_id=f"rep-chunk-{index}",
+                started_at="2026-06-24T10:00:00Z",
+                mapping_method=MappingMethod.ORIENTATION,
+                direction=FlowDirection.OUTBOUND,
+                src_ip="10.0.0.12",
+                dst_ip=peer_ip,
+                dst_port=443,
+                protocol="TCP",
+                service="https",
+            )
+        fresh_ip = "192.0.2.20"
+        reputation = IPReputation.objects.create(ip_address=fresh_ip)
+        IPReputationResult.objects.create(
+            reputation=reputation,
+            source=ReputationSource.ABUSEIPDB,
+            status=ReputationStatus.SUCCESS,
+            verdict=ReputationVerdict.CLEAN,
+            score=0,
+            analyzed_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+
+        with patch.object(
+            type(connection.features),
+            "max_query_params",
+            new_callable=PropertyMock,
+            return_value=16,
+        ):
+            candidates = candidate_ips(
+                limit=100,
+                tools=[ReputationSource.ABUSEIPDB],
+            )
+
+        candidate_addresses = {item.ip_address for item in candidates}
+        self.assertNotIn(fresh_ip, candidate_addresses)
+        self.assertIn("192.0.2.19", candidate_addresses)
+        self.assertEqual(len(candidate_addresses), 21)
 
     def test_run_reputation_analysis_uses_clients_and_aggregates_verdict(self):
         class FakeAbuse:

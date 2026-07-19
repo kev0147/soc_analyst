@@ -28,7 +28,7 @@ import { Bulletin } from '../../core/api/api.types';
                 <th>Status</th>
                 <th>IPs</th>
                 <th>Findings / risques</th>
-                <th>Types</th>
+                <th>Activités</th>
                 <th>Créé le</th>
               </tr>
             </thead>
@@ -52,7 +52,7 @@ import { Bulletin } from '../../core/api/api.types';
                       <div class="muted">{{ findingNames(bulletin.findings) }}</div>
                     }
                   </td>
-                  <td>{{ names(bulletin.bulletin_types) }}</td>
+                  <td>{{ names(bulletin.activities) }}</td>
                   <td>{{ bulletin.created_at | date:'medium' }}</td>
                 </tr>
               } @empty {

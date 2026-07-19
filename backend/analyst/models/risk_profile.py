@@ -5,7 +5,11 @@ from .choices import BulletinSeverity
 
 
 class RiskProfile(TimestampedModel):
-    activity = models.CharField(max_length=150, blank=True, db_index=True)
+    activity = models.ForeignKey(
+        "analyst.ActivityCatalog",
+        on_delete=models.PROTECT,
+        related_name="risk_profiles",
+    )
     name = models.CharField(max_length=150)
     impact = models.TextField()
     recommendation = models.TextField()

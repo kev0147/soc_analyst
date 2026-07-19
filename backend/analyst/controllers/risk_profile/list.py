@@ -12,7 +12,7 @@ class RiskProfileListController(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
-        queryset = RiskProfile.objects.prefetch_related(
+        queryset = RiskProfile.objects.select_related("activity").prefetch_related(
             "port_services",
             Prefetch("indicator_links", queryset=RiskProfileIndicator.objects.select_related("indicator")),
         )
@@ -30,5 +30,11 @@ class RiskProfileListController(generics.ListAPIView):
             queryset = queryset.filter(indicator_links__indicator_id=indicator_id)
         activity = self.request.query_params.get("activity")
         if activity:
-            queryset = queryset.filter(activity__icontains=activity.strip())
+            queryset = queryset.filter(activity__name__icontains=activity.strip())
+        activity_id = self.request.query_params.get("activity_id")
+        if activity_id:
+            try:
+                queryset = queryset.filter(activity_id=int(activity_id))
+            except ValueError:
+                return queryset.none()
         return queryset.distinct()

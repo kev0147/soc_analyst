@@ -114,7 +114,7 @@ def _bulletin_summary(bulletin: Bulletin, ip_link: BulletinIP | None = None, fin
             for item in bulletin.findings.all()
         ],
         "matched_finding_id": finding.id if finding else None,
-        "bulletin_types": [link.bulletin_type.name for link in bulletin.type_links.all()],
+        "activities": [link.activity.name for link in bulletin.activity_links.all()],
     }
 
 
@@ -223,7 +223,7 @@ def build_ip_timeline(ip: str, params) -> dict:
     bulletin_ips = list(
         bulletin_ips.prefetch_related(
             "bulletin__risk_links__risk",
-            "bulletin__type_links__bulletin_type",
+            "bulletin__activity_links__activity",
         ).order_by("-bulletin__reference_year", "-bulletin__sequence_number")[:limit]
     )
 
@@ -239,7 +239,7 @@ def build_ip_timeline(ip: str, params) -> dict:
     bulletin_findings = list(
         bulletin_findings.prefetch_related(
             "bulletin__risk_links__risk",
-            "bulletin__type_links__bulletin_type",
+            "bulletin__activity_links__activity",
             "bulletin__findings",
         ).order_by("-bulletin__reference_year", "-bulletin__sequence_number")[:limit]
     )

@@ -128,7 +128,7 @@ class BulletinFinding(models.Model):
             ).order_by("source")
         ]
         self.risk_name_snapshot = self.risk_profile.name
-        self.risk_activity_snapshot = self.risk_profile.activity
+        self.risk_activity_snapshot = self.risk_profile.activity.name
         self.ioc_snapshot = self.risk_indicator.name if self.risk_indicator_id else ""
         self.severity = self.severity or self.risk_profile.default_severity
         self.impact_snapshot = self.impact_snapshot or self.risk_profile.impact

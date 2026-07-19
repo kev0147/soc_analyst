@@ -46,6 +46,13 @@ def csv_values(params, name: str) -> list[str]:
 
 
 def apply_peer_observation_filters(queryset, params):
+    ids = csv_values(params, "ids")
+    if ids:
+        try:
+            queryset = queryset.filter(id__in=[int(value) for value in ids])
+        except ValueError as exc:
+            raise ValidationError({"ids": "Liste d'identifiants invalide."}) from exc
+
     network_id = int_param(params, "network_id")
     if network_id is not None:
         queryset = queryset.filter(network_id=network_id)

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import connection
 from django.utils import timezone
 
 from analyst.models import Flow, FlowImport, IPReputation, IPReputationResult
@@ -81,11 +82,16 @@ def candidate_ips(
     selected_tools = _enabled_tools(tools)
     stats = _external_ip_stats(_flow_queryset(scope, import_id))
     results_by_ip = defaultdict(dict)
-    for result in IPReputationResult.objects.filter(
-        reputation__ip_address__in=stats.keys(),
-        source__in=selected_tools,
-    ).select_related("reputation"):
-        results_by_ip[result.reputation.ip_address][result.source] = result
+    ip_addresses = list(stats)
+    max_query_params = connection.features.max_query_params
+    chunk_size = 10_000 if max_query_params is None else max(max_query_params - len(selected_tools) - 10, 1)
+    for offset in range(0, len(ip_addresses), chunk_size):
+        chunk = ip_addresses[offset:offset + chunk_size]
+        for result in IPReputationResult.objects.filter(
+            reputation__ip_address__in=chunk,
+            source__in=selected_tools,
+        ).select_related("reputation"):
+            results_by_ip[result.reputation.ip_address][result.source] = result
 
     candidates = []
     for ip, row in stats.items():

@@ -1,9 +1,10 @@
 from collections import defaultdict
 
+from django.db import connection
 from django.db.models import Count, Max, Min, Sum
 from django.db.models.functions import Coalesce
 
-from analyst.models import Flow, IPReputation
+from analyst.models import Flow, IPReputation, PeerObservation
 from analyst.models.choices import ReputationVerdict
 from analyst.services.flows import apply_flow_filters
 from analyst.services.peer_observations import collect_peer_observation_stats
@@ -137,12 +138,15 @@ def top_ports_protocols(params) -> dict:
 def top_peers(params) -> dict:
     limit = limit_param(params)
     stats = collect_peer_observation_stats(_filtered_flows(params))
-    reputations = {
-        item.ip_address: item
+    reputations = {}
+    peer_ips = list({key[1] for key in stats.keys()})
+    max_query_params = connection.features.max_query_params
+    chunk_size = 10_000 if max_query_params is None else max(max_query_params - 10, 1)
+    for offset in range(0, len(peer_ips), chunk_size):
         for item in IPReputation.objects.filter(
-            ip_address__in={key[1] for key in stats.keys()}
-        ).prefetch_related("results")
-    }
+            ip_address__in=peer_ips[offset:offset + chunk_size]
+        ).prefetch_related("results"):
+            reputations[item.ip_address] = item
     rows = defaultdict(
         lambda: {
             "peer_ip": "",
@@ -167,7 +171,7 @@ def top_peers(params) -> dict:
         }
     )
     host_port_filter = int_param(params, "host_port")
-    host_service_filter = params.get("host_service")
+    host_service_filter = params.get("host_service") or params.get("service")
 
     for (
         network_id,
@@ -258,6 +262,36 @@ def top_peers(params) -> dict:
     }.get(sort, lambda row: (row["total_duration_seconds"], row["total_bytes"], row["flow_count"]))
     results = sorted(results, key=sort_key, reverse=True)[:limit]
 
+    observations_by_peer = defaultdict(list)
+    result_peer_ips = [row["peer_ip"] for row in results]
+    observations = PeerObservation.objects.select_related(
+        "peer_reputation", "network", "network__structure"
+    ).filter(peer_reputation__ip_address__in=result_peer_ips)
+    structure_id = int_param(params, "structure_id")
+    if structure_id is not None:
+        observations = observations.filter(network__structure_id=structure_id)
+    if host_port_filter is not None:
+        observations = observations.filter(host_port=host_port_filter)
+    if host_service_filter:
+        observations = observations.filter(host_service__icontains=host_service_filter)
+    for observation in observations:
+        observations_by_peer[observation.peer_ip].append({
+            "id": observation.id,
+            "network": observation.network_id,
+            "structure_id": observation.network.structure_id,
+            "structure_code": observation.network.structure.code,
+            "host_ip": observation.host_ip,
+            "host_port": observation.host_port,
+            "host_service": observation.host_service,
+            "host_port_category": observation.host_port_category,
+            "flow_count": observation.flow_count,
+            "total_bytes": observation.total_bytes,
+            "total_packets": observation.total_packets,
+            "total_duration_seconds": observation.total_duration_seconds,
+            "first_seen_at": observation.first_seen_at.isoformat() if observation.first_seen_at else None,
+            "last_seen_at": observation.last_seen_at.isoformat() if observation.last_seen_at else None,
+        })
+
     for row in results:
         row["host_count"] = len(row["host_ips"])
         row["avg_duration_seconds"] = row["total_duration_seconds"] / row["flow_count"] if row["flow_count"] else None
@@ -270,4 +304,6 @@ def top_peers(params) -> dict:
             {"network_id": network_id, "flow_count": flow_count}
             for network_id, flow_count in sorted(row["networks"].items())
         ]
+        row["observations"] = observations_by_peer[row["peer_ip"]]
+        row["observation_ids"] = [item["id"] for item in row["observations"]]
     return {"limit": limit, "sort": sort, "results": results}

@@ -2,11 +2,11 @@ from django.db import transaction
 
 from analyst.models import (
     Bulletin,
+    BulletinActivity,
     BulletinFinding,
     BulletinIP,
     BulletinRecommendation,
     BulletinRisk,
-    BulletinType,
 )
 
 from .duplicates import find_duplicate_bulletin_findings, find_duplicate_bulletins
@@ -48,8 +48,8 @@ def create_bulletin_with_links(data: dict, user, force_duplicate: bool = False) 
             port=item.get("port"),
             note=item.get("note", ""),
         )
-    for bulletin_type in data["bulletin_types"]:
-        BulletinType.objects.create(bulletin=bulletin, bulletin_type=bulletin_type)
+    for activity in data["activities"]:
+        BulletinActivity.objects.create(bulletin=bulletin, activity=activity)
     for risk in data["risks"]:
         BulletinRisk.objects.create(bulletin=bulletin, risk=risk)
     for recommendation in data["recommendations"]:
@@ -73,7 +73,17 @@ def create_bulletin_from_findings(data: dict, user, force_duplicate: bool = Fals
     observations = list(data["peer_observations"])
     risk_profiles = list(data["risk_profiles"])
     risk_indicator = data.get("risk_indicator")
-    finding_pairs = {(observation.id, risk_profile.id) for observation in observations for risk_profile in risk_profiles}
+    profile_ports = {
+        profile.id: {item.port for item in profile.port_services.all()}
+        for profile in risk_profiles
+    }
+    compatible_pairs = [
+        (observation, risk_profile)
+        for observation in observations
+        for risk_profile in risk_profiles
+        if not profile_ports[risk_profile.id] or observation.host_port in profile_ports[risk_profile.id]
+    ]
+    finding_pairs = {(observation.id, risk_profile.id) for observation, risk_profile in compatible_pairs}
 
     duplicates = find_duplicate_bulletin_findings(
         structure_id=data["structure"].id,
@@ -92,14 +102,16 @@ def create_bulletin_from_findings(data: dict, user, force_duplicate: bool = Fals
         updated_by=user,
     )
 
-    for observation in observations:
-        for risk_profile in risk_profiles:
-            BulletinFinding.objects.create(
-                bulletin=bulletin,
-                peer_observation=observation,
-                risk_profile=risk_profile,
-                risk_indicator=risk_indicator,
-                severity=data.get("severity") or risk_profile.default_severity,
-            )
+    for activity in {profile.activity for _, profile in compatible_pairs}:
+        BulletinActivity.objects.create(bulletin=bulletin, activity=activity)
+
+    for observation, risk_profile in compatible_pairs:
+        BulletinFinding.objects.create(
+            bulletin=bulletin,
+            peer_observation=observation,
+            risk_profile=risk_profile,
+            risk_indicator=risk_indicator,
+            severity=data.get("severity") or risk_profile.default_severity,
+        )
 
     return bulletin, duplicates

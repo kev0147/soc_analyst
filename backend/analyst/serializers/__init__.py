@@ -1,3 +1,4 @@
+from .activity_catalog import ActivityCatalogSerializer
 from .audit_event import AuditEventSerializer
 from .background_job import BackgroundJobSerializer
 from .bulletin import BulletinSerializer
@@ -7,8 +8,7 @@ from .bulletin_ip import BulletinIPSerializer
 from .bulletin_recommendation import BulletinRecommendationSerializer
 from .bulletin_response import BulletinResponseSerializer
 from .bulletin_risk import BulletinRiskSerializer
-from .bulletin_type import BulletinTypeSerializer
-from .bulletin_type_catalog import BulletinTypeCatalogSerializer
+from .bulletin_activity import BulletinActivitySerializer
 from .daily_flow_aggregate import DailyFlowAggregateSerializer
 from .detection_hit import DetectionHitSerializer
 from .detection_rule import DetectionRuleSerializer

@@ -58,11 +58,11 @@ from analyst.controllers.bulletin_ip.retrieve import BulletinIPRetrieveControlle
 from analyst.controllers.bulletin_ip.create import BulletinIPCreateController
 from analyst.controllers.bulletin_ip.update import BulletinIPUpdateController
 from analyst.controllers.bulletin_ip.delete import BulletinIPDeleteController
-from analyst.controllers.bulletin_type_catalog.list import BulletinTypeCatalogListController
-from analyst.controllers.bulletin_type_catalog.retrieve import BulletinTypeCatalogRetrieveController
-from analyst.controllers.bulletin_type_catalog.create import BulletinTypeCatalogCreateController
-from analyst.controllers.bulletin_type_catalog.update import BulletinTypeCatalogUpdateController
-from analyst.controllers.bulletin_type_catalog.delete import BulletinTypeCatalogDeleteController
+from analyst.controllers.activity_catalog.list import ActivityCatalogListController
+from analyst.controllers.activity_catalog.retrieve import ActivityCatalogRetrieveController
+from analyst.controllers.activity_catalog.create import ActivityCatalogCreateController
+from analyst.controllers.activity_catalog.update import ActivityCatalogUpdateController
+from analyst.controllers.activity_catalog.delete import ActivityCatalogDeleteController
 from analyst.controllers.risk_catalog.list import RiskCatalogListController
 from analyst.controllers.risk_catalog.retrieve import RiskCatalogRetrieveController
 from analyst.controllers.risk_catalog.create import RiskCatalogCreateController
@@ -73,10 +73,6 @@ from analyst.controllers.recommendation_catalog.retrieve import RecommendationCa
 from analyst.controllers.recommendation_catalog.create import RecommendationCatalogCreateController
 from analyst.controllers.recommendation_catalog.update import RecommendationCatalogUpdateController
 from analyst.controllers.recommendation_catalog.delete import RecommendationCatalogDeleteController
-from analyst.controllers.bulletin_type.list import BulletinTypeListController
-from analyst.controllers.bulletin_type.retrieve import BulletinTypeRetrieveController
-from analyst.controllers.bulletin_type.create import BulletinTypeCreateController
-from analyst.controllers.bulletin_type.delete import BulletinTypeDeleteController
 from analyst.controllers.bulletin_risk.list import BulletinRiskListController
 from analyst.controllers.bulletin_risk.retrieve import BulletinRiskRetrieveController
 from analyst.controllers.bulletin_risk.create import BulletinRiskCreateController
@@ -228,11 +224,11 @@ urlpatterns = [
     path("bulletin-ips/create/", BulletinIPCreateController.as_view(), name="bulletin_ip-create"),
     path("bulletin-ips/<int:pk>/update/", BulletinIPUpdateController.as_view(), name="bulletin_ip-update"),
     path("bulletin-ips/<int:pk>/delete/", BulletinIPDeleteController.as_view(), name="bulletin_ip-delete"),
-    path("bulletin-types/", BulletinTypeCatalogListController.as_view(), name="bulletin_type_catalog-list"),
-    path("bulletin-types/<int:pk>/", BulletinTypeCatalogRetrieveController.as_view(), name="bulletin_type_catalog-retrieve"),
-    path("bulletin-types/create/", BulletinTypeCatalogCreateController.as_view(), name="bulletin_type_catalog-create"),
-    path("bulletin-types/<int:pk>/update/", BulletinTypeCatalogUpdateController.as_view(), name="bulletin_type_catalog-update"),
-    path("bulletin-types/<int:pk>/delete/", BulletinTypeCatalogDeleteController.as_view(), name="bulletin_type_catalog-delete"),
+    path("activities/", ActivityCatalogListController.as_view(), name="activity_catalog-list"),
+    path("activities/<int:pk>/", ActivityCatalogRetrieveController.as_view(), name="activity_catalog-retrieve"),
+    path("activities/create/", ActivityCatalogCreateController.as_view(), name="activity_catalog-create"),
+    path("activities/<int:pk>/update/", ActivityCatalogUpdateController.as_view(), name="activity_catalog-update"),
+    path("activities/<int:pk>/delete/", ActivityCatalogDeleteController.as_view(), name="activity_catalog-delete"),
     path("risks/", RiskCatalogListController.as_view(), name="risk_catalog-list"),
     path("risks/<int:pk>/", RiskCatalogRetrieveController.as_view(), name="risk_catalog-retrieve"),
     path("risks/create/", RiskCatalogCreateController.as_view(), name="risk_catalog-create"),
@@ -266,10 +262,6 @@ urlpatterns = [
     path("bulletin-findings/create/", BulletinFindingCreateController.as_view(), name="bulletin_finding-create"),
     path("bulletin-findings/<int:pk>/update/", BulletinFindingUpdateController.as_view(), name="bulletin_finding-update"),
     path("bulletin-findings/<int:pk>/delete/", BulletinFindingDeleteController.as_view(), name="bulletin_finding-delete"),
-    path("bulletin-type-links/", BulletinTypeListController.as_view(), name="bulletin_type-list"),
-    path("bulletin-type-links/<int:pk>/", BulletinTypeRetrieveController.as_view(), name="bulletin_type-retrieve"),
-    path("bulletin-type-links/create/", BulletinTypeCreateController.as_view(), name="bulletin_type-create"),
-    path("bulletin-type-links/<int:pk>/delete/", BulletinTypeDeleteController.as_view(), name="bulletin_type-delete"),
     path("bulletin-risk-links/", BulletinRiskListController.as_view(), name="bulletin_risk-list"),
     path("bulletin-risk-links/<int:pk>/", BulletinRiskRetrieveController.as_view(), name="bulletin_risk-retrieve"),
     path("bulletin-risk-links/create/", BulletinRiskCreateController.as_view(), name="bulletin_risk-create"),

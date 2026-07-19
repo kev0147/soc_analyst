@@ -6,10 +6,9 @@ import { DashboardPageComponent } from './pages/dashboard/dashboard-page.compone
 import { ImportsPageComponent } from './pages/imports/imports-page.component';
 import { FlowsPageComponent } from './pages/flows/flows-page.component';
 import { IpAnalysisPageComponent } from './pages/ip-analysis/ip-analysis-page.component';
-import { SocPeersPageComponent } from './pages/soc-peers/soc-peers-page.component';
 import { BulletinsPageComponent } from './pages/bulletins/bulletins-page.component';
 import { BulletinCreatePageComponent } from './pages/bulletin-create/bulletin-create-page.component';
-import { AnalysisPageComponent } from './pages/analysis/analysis-page.component';
+import { InvestigationPageComponent } from './pages/investigation/investigation-page.component';
 import { StructuresPageComponent } from './pages/structures/structures-page.component';
 import { WorkersPageComponent } from './pages/workers/workers-page.component';
 import { DetectionsPageComponent } from './pages/detections/detections-page.component';
@@ -25,10 +24,11 @@ export const routes: Routes = [
       { path: 'dashboard', component: DashboardPageComponent },
       { path: 'imports', component: ImportsPageComponent },
       { path: 'flows', component: FlowsPageComponent },
-      { path: 'analysis', component: AnalysisPageComponent },
+      { path: 'investigation', component: InvestigationPageComponent },
+      { path: 'analysis', redirectTo: 'investigation', pathMatch: 'full' },
       { path: 'detections', component: DetectionsPageComponent },
       { path: 'ip-analysis', component: IpAnalysisPageComponent },
-      { path: 'soc-peers', component: SocPeersPageComponent },
+      { path: 'soc-peers', redirectTo: 'investigation', pathMatch: 'full' },
       { path: 'bulletins', component: BulletinsPageComponent },
       { path: 'bulletins/new', component: BulletinCreatePageComponent },
       { path: 'structures', component: StructuresPageComponent },

@@ -1,3 +1,4 @@
+from .activity_catalog import ActivityCatalog
 from .audit_event import AuditEvent
 from .background_job import BackgroundJob
 from .bulletin import Bulletin
@@ -7,8 +8,7 @@ from .bulletin_ip import BulletinIP
 from .bulletin_recommendation import BulletinRecommendation
 from .bulletin_response import BulletinResponse
 from .bulletin_risk import BulletinRisk
-from .bulletin_type import BulletinType
-from .bulletin_type_catalog import BulletinTypeCatalog
+from .bulletin_activity import BulletinActivity
 from .daily_flow_aggregate import DailyFlowAggregate
 from .detection_hit import DetectionHit
 from .detection_rule import DetectionRule
@@ -32,6 +32,7 @@ from .structure import Structure
 from .user import User
 
 __all__ = [
+    "ActivityCatalog",
     "AuditEvent",
     "BackgroundJob",
     "Bulletin",
@@ -41,8 +42,7 @@ __all__ = [
     "BulletinRecommendation",
     "BulletinResponse",
     "BulletinRisk",
-    "BulletinType",
-    "BulletinTypeCatalog",
+    "BulletinActivity",
     "DailyFlowAggregate",
     "DetectionHit",
     "DetectionRule",

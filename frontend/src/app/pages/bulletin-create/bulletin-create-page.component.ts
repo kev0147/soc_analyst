@@ -3,7 +3,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
-import { Network, PeerObservation, RiskProfile, Structure } from '../../core/api/api.types';
+import { CatalogItem, Network, PeerObservation, RiskProfile, Structure } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
 
 @Component({
@@ -15,9 +15,9 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
       <div class="page-title">
         <div>
           <h1>Créer un bulletin</h1>
-          <p>Créer un bulletin à partir de peer observations et de profils de risque.</p>
+          <p>Un peer peut concerner plusieurs hôtes et ports. Sélectionne les communications à documenter.</p>
         </div>
-        <a class="btn secondary" routerLink="/soc-peers">Choisir des peers</a>
+        <a class="btn secondary" routerLink="/investigation">Choisir des peers</a>
       </div>
 
       <section class="card">
@@ -90,7 +90,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                   <td>{{ item.last_seen_at ? (item.last_seen_at | date:'medium') : '-' }}</td>
                 </tr>
               } @empty {
-                <tr><td colspan="9"><div class="empty">Aucune observation. Va sur SOC peers ou lance une recherche.</div></td></tr>
+                <tr><td colspan="9"><div class="empty">Aucune observation. Utilise la page Investigation ou lance une recherche.</div></td></tr>
               }
             </tbody>
           </table>
@@ -98,18 +98,30 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
       </section>
 
       <section class="card">
-        <h2>Profils de risque</h2>
+        <h2>Activités concernées</h2>
+        <p class="muted">Un bulletin peut contenir plusieurs activités. Elles déterminent les risques proposés.</p>
+        <div class="toolbar">
+          @for (activity of activities(); track activity.id) {
+            <label><input type="checkbox" [checked]="selectedActivityIds().includes(activity.id)" (change)="toggleActivity(activity.id)" /> {{ activity.name }}</label>
+          }
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Risques compatibles</h2>
+        <p class="muted">Seuls les risques correspondant aux activités choisies et aux ports hôtes sélectionnés sont affichés.</p>
         <div class="grid cols-2">
-          @for (risk of riskProfiles(); track risk.id) {
+          @for (risk of visibleRiskProfiles(); track risk.id) {
             <label class="risk-card">
               <input type="checkbox" [checked]="selectedRiskIds().includes(risk.id)" (change)="toggleRisk(risk.id)" />
               <strong>{{ risk.name }}</strong>
+              <small>Activité : {{ risk.activity_name }}</small>
               <span class="badge warning">{{ risk.default_severity }}</span>
               <small>Impact : {{ risk.impact }}</small>
               <small>Recommandation : {{ risk.recommendation }}</small>
             </label>
           } @empty {
-            <p class="muted">Aucun profil de risque. Crée d’abord des RiskProfile côté backend/admin.</p>
+            <p class="muted">Aucun risque compatible avec les activités et ports sélectionnés.</p>
           }
         </div>
       </section>
@@ -145,7 +157,9 @@ export class BulletinCreatePageComponent implements OnInit {
   readonly networks = signal<Network[]>([]);
   readonly structures = signal<Structure[]>([]);
   readonly observations = signal<PeerObservation[]>([]);
+  readonly activities = signal<CatalogItem[]>([]);
   readonly riskProfiles = signal<RiskProfile[]>([]);
+  readonly selectedActivityIds = signal<number[]>([]);
   readonly selectedObservationIds = signal<number[]>([]);
   readonly selectedRiskIds = signal<number[]>([]);
   readonly message = signal('');
@@ -178,11 +192,13 @@ export class BulletinCreatePageComponent implements OnInit {
       if (data.results.length && !this.structureId) this.structureId = data.results[0].id;
     });
     this.api.riskProfiles({ is_active: true }).subscribe((data) => this.riskProfiles.set(data.results));
+    this.api.activities({ is_active: true }).subscribe((data) => this.activities.set(data.results));
     this.loadObservations();
   }
 
   loadObservations() {
     this.api.peerObservationSuggestions({
+      ids: this.selectedObservationIds().length ? this.selectedObservationIds().join(',') : null,
       peer_ip: this.observationSearch,
       structure_id: this.structureId || null,
       limit: 50,
@@ -206,7 +222,7 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   canCreate() {
-    return this.structureId && this.selectedObservationIds().length > 0 && this.selectedRiskIds().length > 0;
+    return this.structureId && this.selectedObservationIds().length > 0 && this.selectedActivityIds().length > 0 && this.selectedRiskIds().length > 0;
   }
 
   create() {
@@ -238,6 +254,24 @@ export class BulletinCreatePageComponent implements OnInit {
     if (network) {
       this.structureId = network.structure;
     }
+  }
+
+  toggleActivity(id: number) {
+    const selected = new Set(this.selectedActivityIds());
+    selected.has(id) ? selected.delete(id) : selected.add(id);
+    this.selectedActivityIds.set([...selected]);
+    const visible = new Set(this.visibleRiskProfiles().map((risk) => risk.id));
+    this.selectedRiskIds.set(this.selectedRiskIds().filter((riskId) => visible.has(riskId)));
+  }
+
+  visibleRiskProfiles() {
+    const activities = new Set(this.selectedActivityIds());
+    const selectedObservations = this.observations().filter((item) => this.selectedObservationIds().includes(item.id));
+    const ports = new Set(selectedObservations.map((item) => item.host_port).filter((port): port is number => port !== null));
+    return this.riskProfiles().filter((risk) =>
+      activities.has(risk.activity) &&
+      (risk.port_services.length === 0 || risk.port_services.some((item) => ports.has(item.port)))
+    );
   }
 
   private syncStructureFromObservations() {

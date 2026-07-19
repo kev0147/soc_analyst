@@ -6,7 +6,7 @@ from pathlib import Path
 from django.db import transaction
 from django.utils.dateparse import parse_datetime
 
-from analyst.models import BulletinTypeCatalog, RecommendationCatalog, RiskCatalog, Structure
+from analyst.models import ActivityCatalog, RecommendationCatalog, RiskCatalog, Structure
 from analyst.models.choices import BulletinIPRole, BulletinSeverity, BulletinStatus
 from analyst.services.bulletins import create_bulletin_with_links
 from analyst.services.excel_reader import read_xlsx_rows
@@ -151,7 +151,7 @@ def import_bulletins_from_excel(path: str | Path, user, default_structure_code: 
                 "sent_at": parse_datetime(_row_value(first_row, "sent_at")) if _row_value(first_row, "sent_at") else None,
                 "ips": ips,
                 "risks": _catalog_items(RiskCatalog, sorted(risks)),
-                "bulletin_types": _catalog_items(BulletinTypeCatalog, sorted(types)),
+                "activities": _catalog_items(ActivityCatalog, sorted(types)),
                 "recommendations": _catalog_items(RecommendationCatalog, sorted(recommendations)),
             }
             bulletin, found_duplicates = create_bulletin_with_links(data, user, force_duplicate=force_duplicates)

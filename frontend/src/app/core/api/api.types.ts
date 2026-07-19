@@ -197,7 +197,7 @@ export interface Bulletin {
   created_at: string;
   ips?: Array<{ ip_address: string; role: string }>;
   risks?: Array<{ id: number; name: string }>;
-  bulletin_types?: Array<{ id: number; name: string }>;
+  activities?: Array<{ id: number; name: string }>;
   recommendations?: Array<{ id: number; name: string; description?: string }>;
   findings?: BulletinFinding[];
 }
@@ -211,11 +211,14 @@ export interface CatalogItem {
 
 export interface RiskProfile {
   id: number;
+  activity: number;
+  activity_name: string;
   name: string;
   impact: string;
   recommendation: string;
   default_severity: 'low' | 'medium' | 'high' | 'critical';
   is_active: boolean;
+  port_services: Array<{ id: number; port: number; service: string }>;
 }
 
 export interface PeerObservation {
@@ -281,6 +284,25 @@ export interface TopPeer {
   host_ips: string[];
   host_ports: number[];
   services: string[];
+  observation_ids: number[];
+  observations: PeerInvestigationObservation[];
+}
+
+export interface PeerInvestigationObservation {
+  id: number;
+  network: number;
+  structure_id: number;
+  structure_code: string;
+  host_ip: string | null;
+  host_port: number | null;
+  host_service: string;
+  host_port_category: string;
+  flow_count: number;
+  total_bytes: number;
+  total_packets: number;
+  total_duration_seconds: number;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
 }
 
 export interface IpAnalysisRecord {

@@ -67,6 +67,27 @@ SQLITE_LOCK_RETRY_ATTEMPTS=3
 SQLITE_LOCK_RETRY_BASE_SECONDS=1
 ```
 
+SQLite reste le moteur par défaut :
+
+```dotenv
+DB_ENGINE=sqlite
+```
+
+Pour utiliser PostgreSQL :
+
+```dotenv
+DB_ENGINE=postgresql
+DB_NAME=soc_analyst
+DB_USER=soc_analyst
+DB_PASSWORD=remplacer-par-un-mot-de-passe
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_CONN_MAX_AGE=60
+DB_CONNECT_TIMEOUT=10
+```
+
+Le paquet `psycopg` déclaré dans `backend\requirements.txt` doit être installé avant de démarrer Django avec PostgreSQL.
+
 Ne jamais ajouter `backend\.env` à Git.
 
 ## 3. Préparation de la base

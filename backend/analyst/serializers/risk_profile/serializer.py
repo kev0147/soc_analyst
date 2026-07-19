@@ -6,6 +6,7 @@ from analyst.serializers.risk_profile_port_service import RiskProfilePortService
 
 
 class RiskProfileSerializer(serializers.ModelSerializer):
+    activity_name = serializers.CharField(source="activity.name", read_only=True)
     indicators = serializers.SerializerMethodField()
     port_services = RiskProfilePortServiceSerializer(many=True, read_only=True)
 

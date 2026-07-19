@@ -3,6 +3,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService, QueryParams } from '../../core/api/api.service';
+import { AuthService } from '../../core/auth/auth.service';
 import { DetectionHit, DetectionRule, FlowImport, Structure } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
 
@@ -84,8 +85,19 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                 {{ severityLabel(rule.severity) }}
               </span>
             </label>
+            @if (isAdmin()) {
+              <div class="rule-editor">
+                <label><input type="checkbox" [(ngModel)]="rule.is_active" /> Active</label>
+                <select class="select" [(ngModel)]="rule.severity">
+                  <option value="low">Faible</option><option value="medium">Moyenne</option><option value="high">Élevée</option><option value="critical">Critique</option>
+                </select>
+                <textarea class="input" rows="3" [(ngModel)]="parameterDrafts[rule.id]" aria-label="Paramètres JSON"></textarea>
+                <button class="btn secondary" (click)="saveRule(rule)">Enregistrer</button>
+              </div>
+            }
           }
         </div>
+        @if (configMessage()) { <p class="muted">{{ configMessage() }}</p> }
         <div class="toolbar">
           <button class="btn" (click)="launchDetection()" [disabled]="selectedRuleIds().length === 0">
             Lancer les règles sélectionnées
@@ -242,10 +254,14 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
     .rule-card small, td small { display: block; color: var(--muted); margin-top: 4px; }
     .row-actions { display: grid; gap: 6px; min-width: 150px; }
     .row-actions .btn { white-space: nowrap; }
+    .rule-editor { display: grid; grid-template-columns: auto 140px 1fr auto; gap: 10px; align-items: center; margin: -6px 0 10px 38px; }
+    .rule-editor textarea { font-family: monospace; }
+    @media (max-width: 900px) { .rule-editor { grid-template-columns: 1fr; margin-left: 0; } }
   `,
 })
 export class DetectionsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   readonly rules = signal<DetectionRule[]>([]);
   readonly hits = signal<DetectionHit[]>([]);
   readonly structures = signal<Structure[]>([]);
@@ -253,6 +269,8 @@ export class DetectionsPageComponent implements OnInit {
   readonly selectedRuleIds = signal<number[]>([]);
   readonly runMessage = signal('');
   readonly aggregateMessage = signal('');
+  readonly configMessage = signal('');
+  parameterDrafts: Record<number, string> = {};
   readonly bytes = formatBytes;
   readonly duration = formatDuration;
 
@@ -279,9 +297,10 @@ export class DetectionsPageComponent implements OnInit {
       this.imports.set(data.results);
       this.importId = data.results[0]?.id || 0;
     });
-    this.api.detectionRules({ is_active: true }).subscribe((data) => {
+    this.api.detectionRules().subscribe((data) => {
       this.rules.set(data.results);
-      this.selectedRuleIds.set(data.results.map((rule) => rule.id));
+      this.selectedRuleIds.set(data.results.filter((rule) => rule.is_active).map((rule) => rule.id));
+      for (const rule of data.results) this.parameterDrafts[rule.id] = JSON.stringify(rule.parameters, null, 2);
     });
     this.loadHits();
   }
@@ -290,6 +309,23 @@ export class DetectionsPageComponent implements OnInit {
     const selected = new Set(this.selectedRuleIds());
     selected.has(id) ? selected.delete(id) : selected.add(id);
     this.selectedRuleIds.set([...selected]);
+  }
+
+  isAdmin() { return this.auth.user()?.role === 'admin'; }
+
+  saveRule(rule: DetectionRule) {
+    try {
+      const parameters = JSON.parse(this.parameterDrafts[rule.id] || '{}');
+      this.api.updateDetectionRule(rule.id, { severity: rule.severity, is_active: rule.is_active, parameters }).subscribe({
+        next: (updated) => {
+          this.rules.update((items) => items.map((item) => item.id === updated.id ? updated : item));
+          this.configMessage.set(`Règle « ${updated.name} » enregistrée.`);
+        },
+        error: (error) => this.configMessage.set(this.errorMessage(error, 'Configuration refusée.')),
+      });
+    } catch {
+      this.configMessage.set('Les paramètres doivent être un objet JSON valide.');
+    }
   }
 
   launchDetection() {

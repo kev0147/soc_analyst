@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
-from analyst.models import BulletinTypeCatalog, RiskCatalog, Structure
+from analyst.models import ActivityCatalog, RiskCatalog, Structure
 from analyst.models.choices import BulletinIPRole, BulletinSeverity, BulletinStatus
 from analyst.services.bulletins.manager import create_bulletin_with_links
 from analyst.services.excel_reader import read_xlsx_sheets
@@ -172,7 +172,7 @@ def import_legacy_bulletins_workbook(
                 "sent_at": _date(date_value),
                 "ips": ips,
                 "risks": [historical_risk],
-                "bulletin_types": _catalog(BulletinTypeCatalog, types),
+                "activities": _catalog(ActivityCatalog, types),
                 "recommendations": [],
             }
             bulletin, duplicates = create_bulletin_with_links(data, user, force_duplicate=force_duplicates)

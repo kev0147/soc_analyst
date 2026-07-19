@@ -117,8 +117,8 @@ export class ApiService {
     return this.http.get<PaginatedResponse<CatalogItem>>(`${this.baseUrl}/risks/`);
   }
 
-  bulletinTypes(): Observable<PaginatedResponse<CatalogItem>> {
-    return this.http.get<PaginatedResponse<CatalogItem>>(`${this.baseUrl}/bulletin-types/`);
+  activities(params: QueryParams = {}): Observable<PaginatedResponse<CatalogItem>> {
+    return this.http.get<PaginatedResponse<CatalogItem>>(`${this.baseUrl}/activities/`, { params: this.params(params) });
   }
 
   recommendations(): Observable<PaginatedResponse<CatalogItem>> {
@@ -190,6 +190,10 @@ export class ApiService {
     return this.http.get<PaginatedResponse<DetectionRule>>(`${this.baseUrl}/detection-rules/`, {
       params: this.params(params),
     });
+  }
+
+  updateDetectionRule(id: number, payload: Partial<DetectionRule>): Observable<DetectionRule> {
+    return this.http.put<DetectionRule>(`${this.baseUrl}/detection-rules/${id}/update/`, payload);
   }
 
   detectionHits(params: QueryParams = {}): Observable<PaginatedResponse<DetectionHit>> {

@@ -7,6 +7,7 @@ from pathlib import Path
 from django.db import transaction
 
 from analyst.models import (
+    ActivityCatalog,
     RiskIndicator,
     RiskProfile,
     RiskProfileIndicator,
@@ -164,11 +165,17 @@ def import_risk_profiles_catalog(path: str | Path, sheet_index: int = 1, dry_run
                     indicators = parse_indicators(row["indicators"])
                     severity = parse_severity(row["severity"])
                     source_key = _source_key(row, ports, indicators)
+                    activity = ActivityCatalog.objects.filter(name__iexact=row["activity"]).first()
+                    if not activity:
+                        activity = ActivityCatalog.objects.create(name=row["activity"] or "Non classée")
+                    elif not activity.is_active:
+                        activity.is_active = True
+                        activity.save(update_fields=("is_active", "updated_at"))
 
                     profile, created = RiskProfile.objects.get_or_create(
                         source_key=source_key,
                         defaults={
-                            "activity": row["activity"],
+                            "activity": activity,
                             "name": row["risk"],
                             "impact": row["impact"],
                             "recommendation": row["recommendation"],
@@ -176,7 +183,7 @@ def import_risk_profiles_catalog(path: str | Path, sheet_index: int = 1, dry_run
                         },
                     )
                     if not created:
-                        profile.activity = row["activity"]
+                        profile.activity = activity
                         profile.name = row["risk"]
                         profile.impact = row["impact"]
                         profile.recommendation = row["recommendation"]

@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
 from analyst.models import (
+    ActivityCatalog,
     Bulletin,
-    BulletinTypeCatalog,
     PeerObservation,
     RecommendationCatalog,
     RiskCatalog,
@@ -16,7 +16,7 @@ from analyst.models.choices import BulletinIPRole
 class BulletinSerializer(serializers.ModelSerializer):
     ips = serializers.SerializerMethodField()
     risks = serializers.SerializerMethodField()
-    bulletin_types = serializers.SerializerMethodField()
+    activities = serializers.SerializerMethodField()
     recommendations = serializers.SerializerMethodField()
     findings = serializers.SerializerMethodField()
 
@@ -37,8 +37,8 @@ class BulletinSerializer(serializers.ModelSerializer):
     def get_risks(self, obj):
         return [{"id": link.risk_id, "name": link.risk.name} for link in obj.risk_links.all()]
 
-    def get_bulletin_types(self, obj):
-        return [{"id": link.bulletin_type_id, "name": link.bulletin_type.name} for link in obj.type_links.all()]
+    def get_activities(self, obj):
+        return [{"id": link.activity_id, "name": link.activity.name} for link in obj.activity_links.all()]
 
     def get_recommendations(self, obj):
         return [
@@ -102,12 +102,10 @@ class BulletinCreateInputSerializer(serializers.Serializer):
         source="risks",
         many=True,
     )
-    bulletin_type_ids = serializers.PrimaryKeyRelatedField(
-        queryset=BulletinTypeCatalog.objects.filter(is_active=True),
-        source="bulletin_types",
+    activity_ids = serializers.PrimaryKeyRelatedField(
+        queryset=ActivityCatalog.objects.filter(is_active=True),
+        source="activities",
         many=True,
-        required=False,
-        default=list,
     )
     recommendation_ids = serializers.PrimaryKeyRelatedField(
         queryset=RecommendationCatalog.objects.filter(is_active=True),
@@ -139,6 +137,11 @@ class BulletinCreateInputSerializer(serializers.Serializer):
             raise serializers.ValidationError("Au moins un risque doit être lié au bulletin.")
         return value
 
+    def validate_activities(self, value):
+        if not value:
+            raise serializers.ValidationError("Au moins une activité doit être liée au bulletin.")
+        return value
+
 class BulletinFromFindingsInputSerializer(serializers.Serializer):
     structure_id = serializers.PrimaryKeyRelatedField(queryset=Structure.objects.filter(is_active=True), source="structure")
     external_reference = serializers.CharField(required=False, allow_blank=True, max_length=128)
@@ -151,7 +154,7 @@ class BulletinFromFindingsInputSerializer(serializers.Serializer):
         many=True,
     )
     risk_profile_ids = serializers.PrimaryKeyRelatedField(
-        queryset=RiskProfile.objects.filter(is_active=True),
+        queryset=RiskProfile.objects.filter(is_active=True).select_related("activity").prefetch_related("port_services"),
         source="risk_profiles",
         many=True,
     )
@@ -178,6 +181,25 @@ class BulletinFromFindingsInputSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"peer_observation_ids": "Toutes les observations doivent appartenir à la structure du bulletin."}
             )
+
+        risk_profiles = attrs.get("risk_profiles", [])
+        unmatched_observations = []
+        for observation in observations:
+            compatible = False
+            for profile in risk_profiles:
+                ports = {item.port for item in profile.port_services.all()}
+                if not ports or observation.host_port in ports:
+                    compatible = True
+                    break
+            if not compatible:
+                unmatched_observations.append(observation.id)
+        if unmatched_observations:
+            raise serializers.ValidationError({
+                "risk_profile_ids": (
+                    "Aucun risque sélectionné n’est compatible avec le port hôte des observations : "
+                    + ", ".join(str(item) for item in unmatched_observations)
+                )
+            })
 
         return attrs
 
