@@ -26,7 +26,14 @@ def _audit(job: BackgroundJob, action: str, details: dict | None = None):
 
 def _claim(job_id: str) -> BackgroundJob | None:
     with transaction.atomic():
-        job = BackgroundJob.objects.select_for_update().select_related("created_by", "flow_import").get(pk=job_id)
+        # PostgreSQL refuses FOR UPDATE on the nullable side of the LEFT JOINs
+        # generated for created_by/flow_import. Only the BackgroundJob row needs
+        # to be locked while it is claimed.
+        job = (
+            BackgroundJob.objects.select_for_update(of=("self",))
+            .select_related("created_by", "flow_import")
+            .get(pk=job_id)
+        )
         if job.status != BackgroundJobStatus.QUEUED:
             return None
         job.status = BackgroundJobStatus.RUNNING
