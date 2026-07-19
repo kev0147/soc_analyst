@@ -20,13 +20,14 @@ if (-not (Test-Path (Join-Path $root "frontend\node_modules"))) {
     throw "Dependances frontend absentes. Execute npm ci dans le dossier frontend."
 }
 
-& $python "backend\manage.py" migrate --noinput
-if ($LASTEXITCODE -ne 0) {
-    throw "La migration de la base a echoue."
-}
-
 $runtime = Join-Path $root "backend\.runtime"
 New-Item -ItemType Directory -Path $runtime -Force | Out-Null
+$migrationLog = Join-Path $runtime "migration.log"
+
+& $python "backend\manage.py" migrate --noinput 2>&1 | Tee-Object -FilePath $migrationLog
+if ($LASTEXITCODE -ne 0) {
+    throw "La migration de la base a echoue. Consulte backend\.runtime\migration.log."
+}
 
 $backend = Start-Process -FilePath $python `
     -ArgumentList @("backend\manage.py", "runserver", "127.0.0.1:8000", "--noreload") `
