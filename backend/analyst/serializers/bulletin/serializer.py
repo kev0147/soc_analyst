@@ -152,6 +152,13 @@ class BulletinFromFindingsInputSerializer(serializers.Serializer):
         queryset=PeerObservation.objects.select_related("network", "network__structure"),
         source="peer_observations",
         many=True,
+        required=False,
+    )
+    peer_ips = serializers.ListField(
+        child=serializers.IPAddressField(protocol="IPv4"),
+        required=False,
+        allow_empty=False,
+        write_only=True,
     )
     risk_profile_ids = serializers.PrimaryKeyRelatedField(
         queryset=RiskProfile.objects.filter(is_active=True).select_related("activity").prefetch_related("port_services"),
@@ -161,8 +168,6 @@ class BulletinFromFindingsInputSerializer(serializers.Serializer):
     force_duplicate = serializers.BooleanField(required=False, default=False)
 
     def validate_peer_observation_ids(self, value):
-        if not value:
-            raise serializers.ValidationError("Au moins une observation peer doit être renseignée.")
         return value
 
     def validate_risk_profile_ids(self, value):
@@ -172,7 +177,23 @@ class BulletinFromFindingsInputSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         structure = attrs["structure"]
-        observations = attrs.get("peer_observations", [])
+        observations = list(attrs.get("peer_observations", []))
+        peer_ips = attrs.pop("peer_ips", [])
+        if peer_ips:
+            observations.extend(
+                PeerObservation.objects.select_related("network", "network__structure", "peer_reputation")
+                .filter(
+                    network__structure=structure,
+                    peer_reputation__ip_address__in=peer_ips,
+                )
+                .distinct()
+            )
+        observations = list({observation.id: observation for observation in observations}.values())
+        if not observations:
+            raise serializers.ValidationError({
+                "peer_ips": "Aucune observation synchronisée ne correspond aux peers sélectionnés."
+            })
+        attrs["peer_observations"] = observations
 
         invalid_structure = [
             observation.id for observation in observations if observation.network.structure_id != structure.id

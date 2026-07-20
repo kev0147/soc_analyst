@@ -78,7 +78,7 @@ from .services.jobs.supervisor import WorkerHeartbeat, worker_status
 from .services.daily_aggregates import build_daily_flow_aggregates
 from .services.detections import run_detections
 from .services.risk_profiles import import_risk_profiles_catalog
-from .serializers.bulletin.serializer import BulletinAssistantDraftInputSerializer
+from .serializers.bulletin.serializer import BulletinAssistantDraftInputSerializer, BulletinFromFindingsInputSerializer
 from .serializers import DailyFlowAggregateSerializer, DetectionHitSerializer
 
 
@@ -2012,3 +2012,28 @@ class BulletinBusinessTests(TestCase):
 
         findings = {(item.peer_observation_id, item.risk_profile_id) for item in bulletin.findings.all()}
         self.assertEqual(findings, {(ssh.id, specialized.id), (unknown.id, fallback.id)})
+
+    def test_bulletin_input_resolves_all_observations_from_peer_ips(self):
+        network = Network.objects.create(structure=self.structure, name="Réseau sélection peer")
+        reputation = IPReputation.objects.create(ip_address="203.0.113.240")
+        observations = [
+            PeerObservation.objects.create(
+                peer_reputation=reputation,
+                network=network,
+                host_ip=f"10.0.0.{index}",
+                host_port=65000 + index,
+            )
+            for index in (1, 2)
+        ]
+        fallback = RiskProfile.objects.get(source_key="system-default-unclassified-risk")
+        serializer = BulletinFromFindingsInputSerializer(data={
+            "structure_id": self.structure.id,
+            "peer_ips": ["203.0.113.240"],
+            "risk_profile_ids": [fallback.id],
+        })
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(
+            {item.id for item in serializer.validated_data["peer_observations"]},
+            {item.id for item in observations},
+        )

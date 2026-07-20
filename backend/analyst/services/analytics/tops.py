@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from django.db import connection
-from django.db.models import Count, Max, Min, Sum
+from django.db.models import Count, Max, Min, Q, Sum
 from django.db.models.functions import Coalesce
 
 from analyst.models import Flow, IPReputation, PeerObservation
@@ -13,7 +13,11 @@ from .params import flow_filter_params_without_ordering, int_param, limit_param
 
 
 def _filtered_flows(params):
-    return apply_flow_filters(Flow.objects.all(), flow_filter_params_without_ordering(params)).order_by()
+    flows = apply_flow_filters(Flow.objects.all(), flow_filter_params_without_ordering(params)).order_by()
+    peer_ips = [item for item in str(params.get("peer_ips") or "").replace(",", " ").split() if item]
+    if peer_ips:
+        flows = flows.filter(Q(src_ip__in=peer_ips) | Q(dst_ip__in=peer_ips))
+    return flows
 
 
 def top_talkers(params) -> dict:
@@ -294,34 +298,36 @@ def top_peers(params) -> dict:
     results = sorted(results, key=sort_key, reverse=True)[:limit]
 
     observations_by_peer = defaultdict(list)
-    result_peer_ips = [row["peer_ip"] for row in results]
-    observations = PeerObservation.objects.select_related(
-        "peer_reputation", "network", "network__structure"
-    ).filter(peer_reputation__ip_address__in=result_peer_ips)
-    structure_id = int_param(params, "structure_id")
-    if structure_id is not None:
-        observations = observations.filter(network__structure_id=structure_id)
-    if host_port_filter is not None:
-        observations = observations.filter(host_port=host_port_filter)
-    if host_service_filter:
-        observations = observations.filter(host_service__icontains=host_service_filter)
-    for observation in observations:
-        observations_by_peer[observation.peer_ip].append({
-            "id": observation.id,
-            "network": observation.network_id,
-            "structure_id": observation.network.structure_id,
-            "structure_code": observation.network.structure.code,
-            "host_ip": observation.host_ip,
-            "host_port": observation.host_port,
-            "host_service": observation.host_service,
-            "host_port_category": observation.host_port_category,
-            "flow_count": observation.flow_count,
-            "total_bytes": observation.total_bytes,
-            "total_packets": observation.total_packets,
-            "total_duration_seconds": observation.total_duration_seconds,
-            "first_seen_at": observation.first_seen_at.isoformat() if observation.first_seen_at else None,
-            "last_seen_at": observation.last_seen_at.isoformat() if observation.last_seen_at else None,
-        })
+    include_observations = str(params.get("include_observations", "true")).lower() not in {"0", "false", "no"}
+    if include_observations:
+        result_peer_ips = [row["peer_ip"] for row in results]
+        observations = PeerObservation.objects.select_related(
+            "peer_reputation", "network", "network__structure"
+        ).filter(peer_reputation__ip_address__in=result_peer_ips)
+        structure_id = int_param(params, "structure_id")
+        if structure_id is not None:
+            observations = observations.filter(network__structure_id=structure_id)
+        if host_port_filter is not None:
+            observations = observations.filter(host_port=host_port_filter)
+        if host_service_filter:
+            observations = observations.filter(host_service__icontains=host_service_filter)
+        for observation in observations:
+            observations_by_peer[observation.peer_ip].append({
+                "id": observation.id,
+                "network": observation.network_id,
+                "structure_id": observation.network.structure_id,
+                "structure_code": observation.network.structure.code,
+                "host_ip": observation.host_ip,
+                "host_port": observation.host_port,
+                "host_service": observation.host_service,
+                "host_port_category": observation.host_port_category,
+                "flow_count": observation.flow_count,
+                "total_bytes": observation.total_bytes,
+                "total_packets": observation.total_packets,
+                "total_duration_seconds": observation.total_duration_seconds,
+                "first_seen_at": observation.first_seen_at.isoformat() if observation.first_seen_at else None,
+                "last_seen_at": observation.last_seen_at.isoformat() if observation.last_seen_at else None,
+            })
 
     for row in results:
         row["host_count"] = len(row["host_ips"])

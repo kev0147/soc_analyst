@@ -16,8 +16,6 @@ interface BulletinPeerRow {
   total_packets: number;
   total_bytes: number;
   total_duration_seconds: number;
-  observation_ids: number[];
-  observations: Array<{ id: number; host_port: number | null }>;
 }
 
 @Component({
@@ -168,6 +166,7 @@ export class BulletinCreatePageComponent implements OnInit {
   readonly peerRows = signal<BulletinPeerRow[]>([]);
   readonly riskProfiles = signal<RiskProfile[]>([]);
   readonly selectedObservationIds = signal<number[]>([]);
+  readonly selectedPeerIps = signal<string[]>([]);
   readonly selectedRiskIds = signal<number[]>([]);
   readonly message = signal('');
   readonly bytes = formatBytes;
@@ -207,7 +206,7 @@ export class BulletinCreatePageComponent implements OnInit {
       }
     });
     if (this.selectedObservationIds().length) this.loadObservations();
-    for (const peerIp of peers) this.addPeerByIp(peerIp, false);
+    if (peers.length) this.addPeers(peers, false);
   }
 
   loadObservations(selectedOnly = true) {
@@ -222,7 +221,9 @@ export class BulletinCreatePageComponent implements OnInit {
           ? data.results
           : [...this.observations(), ...data.results].filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index);
         this.observations.set(merged);
-        this.peerRows.set(this.groupObservations(merged));
+        const rows = this.groupObservations(merged);
+        this.peerRows.set(rows);
+        this.selectedPeerIps.set(rows.map((row) => row.peer_ip));
         if (!selectedOnly) {
           this.selectedObservationIds.set([...new Set([...this.selectedObservationIds(), ...data.results.map((item) => item.id)])]);
         }
@@ -242,30 +243,32 @@ export class BulletinCreatePageComponent implements OnInit {
       this.message.set('Saisis une adresse IP peer à rechercher.');
       return;
     }
-    this.addPeerByIp(this.observationSearch.trim(), true);
+    const peerIps = this.observationSearch.split(/[\s,;]+/).map((value) => value.trim()).filter(Boolean);
+    if (!peerIps.every((value) => this.isIpv4(value))) {
+      this.message.set('Saisis une ou plusieurs adresses IPv4 valides.');
+      return;
+    }
+    this.addPeers(peerIps, true);
   }
 
-  private addPeerByIp(peerIp: string, announce: boolean) {
+  private addPeers(peerIps: string[], announce: boolean) {
     this.api.topPeers({
-      peer_ip: peerIp,
+      peer_ips: peerIps.join(','),
       structure_id: this.structureId || null,
       sort: 'verdict',
-      limit: 1,
+      include_observations: false,
+      limit: Math.min(Math.max(peerIps.length, 1), 100),
     }).subscribe({
       next: (data) => {
-        const peer = data.results[0];
-        if (!peer) {
-          this.message.set('Aucun peer trouvé pour cette adresse IP et cette structure.');
+        if (!data.results.length) {
+          this.message.set('Aucun peer trouvé pour ces adresses IP et cette structure.');
           return;
         }
-        if (!peer.observation_ids.length) {
-          this.message.set('Ce peer existe dans les flows, mais ses observations ne sont pas synchronisées.');
-          return;
-        }
-        const row = this.fromTopPeer(peer);
-        this.peerRows.set([...this.peerRows().filter((item) => item.peer_ip !== row.peer_ip), row]);
-        this.selectedObservationIds.set([...new Set([...this.selectedObservationIds(), ...row.observation_ids])]);
-        if (announce) this.message.set(`Peer ${row.peer_ip} ajouté avec ${row.observation_ids.length} communication(s).`);
+        const rows = data.results.map((peer) => this.fromTopPeer(peer));
+        const returnedIps = new Set(rows.map((row) => row.peer_ip));
+        this.peerRows.set([...this.peerRows().filter((item) => !returnedIps.has(item.peer_ip)), ...rows]);
+        this.selectedPeerIps.set([...new Set([...this.selectedPeerIps(), ...returnedIps])]);
+        if (announce) this.message.set(`${rows.length} peer(s) ajouté(s).`);
       },
       error: (error) => this.message.set(this.errorMessage(error, 'Recherche impossible.')),
     });
@@ -279,14 +282,13 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   peerSelected(peer: BulletinPeerRow) {
-    return peer.observation_ids.length > 0 && peer.observation_ids.every((id) => this.selectedObservationIds().includes(id));
+    return this.selectedPeerIps().includes(peer.peer_ip);
   }
 
   togglePeer(peer: BulletinPeerRow) {
-    const selected = new Set(this.selectedObservationIds());
-    const allSelected = peer.observation_ids.every((id) => selected.has(id));
-    for (const id of peer.observation_ids) allSelected ? selected.delete(id) : selected.add(id);
-    this.selectedObservationIds.set([...selected]);
+    const selected = new Set(this.selectedPeerIps());
+    selected.has(peer.peer_ip) ? selected.delete(peer.peer_ip) : selected.add(peer.peer_ip);
+    this.selectedPeerIps.set([...selected]);
   }
 
   toggleRisk(id: number) {
@@ -296,7 +298,7 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   canCreate() {
-    return this.structureId && this.selectedObservationIds().length > 0 && this.selectedRiskIds().length > 0 && this.uncoveredPeers().length === 0;
+    return this.structureId && this.selectedPeerIps().length > 0 && this.selectedRiskIds().length > 0 && this.uncoveredPeers().length === 0;
   }
 
   create() {
@@ -304,7 +306,7 @@ export class BulletinCreatePageComponent implements OnInit {
       structure_id: this.structureId,
       external_reference: this.externalReference,
       status: this.status,
-      peer_observation_ids: this.selectedObservationIds(),
+      peer_ips: this.selectedPeerIps(),
       risk_profile_ids: this.selectedRiskIds(),
       force_duplicate: this.forceDuplicate,
     };
@@ -333,10 +335,8 @@ export class BulletinCreatePageComponent implements OnInit {
   visibleRiskProfiles() {
     const ports = new Set(
       this.peerRows()
-        .flatMap((peer) => peer.observations)
-        .filter((item) => this.selectedObservationIds().includes(item.id))
-        .map((item) => item.host_port)
-        .filter((port): port is number => port !== null)
+        .filter((peer) => this.selectedPeerIps().includes(peer.peer_ip))
+        .flatMap((peer) => peer.host_ports)
     );
     return this.riskProfiles().filter((risk) =>
       risk.port_services.length === 0 || risk.port_services.some((item) => ports.has(item.port))
@@ -345,10 +345,13 @@ export class BulletinCreatePageComponent implements OnInit {
 
   uncoveredPeers() {
     const selectedRisks = this.riskProfiles().filter((risk) => this.selectedRiskIds().includes(risk.id));
-    return this.peerRows().filter((peer) => peer.observations.some((observation) =>
-      this.selectedObservationIds().includes(observation.id) &&
-      !selectedRisks.some((risk) => risk.port_services.length === 0 || risk.port_services.some((item) => item.port === observation.host_port))
-    ));
+    return this.peerRows().filter((peer) => {
+      if (!this.selectedPeerIps().includes(peer.peer_ip)) return false;
+      const ports: Array<number | null> = peer.host_ports.length ? peer.host_ports : [null];
+      return ports.some((port) => !selectedRisks.some(
+        (risk) => risk.port_services.length === 0 || risk.port_services.some((item) => item.port === port)
+      ));
+    });
   }
 
   private fromTopPeer(peer: TopPeer): BulletinPeerRow {
@@ -363,8 +366,6 @@ export class BulletinCreatePageComponent implements OnInit {
       total_packets: peer.total_packets,
       total_bytes: peer.total_bytes,
       total_duration_seconds: peer.total_duration_seconds,
-      observation_ids: peer.observation_ids,
-      observations: peer.observations.map((item) => ({ id: item.id, host_port: item.host_port })),
     };
   }
 
@@ -384,8 +385,6 @@ export class BulletinCreatePageComponent implements OnInit {
           total_packets: 0,
           total_bytes: 0,
           total_duration_seconds: 0,
-          observation_ids: [],
-          observations: [],
         };
         grouped.set(item.peer_ip, row);
       }
@@ -395,14 +394,17 @@ export class BulletinCreatePageComponent implements OnInit {
       row.total_packets += item.total_packets;
       row.total_bytes += item.total_bytes;
       row.total_duration_seconds += item.total_duration_seconds;
-      row.observation_ids.push(item.id);
-      row.observations.push({ id: item.id, host_port: item.host_port });
     }
     return [...grouped.values()].map((row) => ({
       ...row,
       host_ips: row.host_ips.sort(),
       host_ports: row.host_ports.sort((a, b) => a - b),
     }));
+  }
+
+  private isIpv4(value: string) {
+    const parts = value.split('.');
+    return parts.length === 4 && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
   }
 
   private syncStructureFromObservations() {
