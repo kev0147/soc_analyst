@@ -119,8 +119,16 @@ interface BulletinPeerRow {
         <div class="grid cols-2">
           @for (risk of visibleRiskProfiles(); track risk.id) {
             <label class="risk-card">
-              <input type="checkbox" [checked]="selectedRiskIds().includes(risk.id)" (change)="toggleRisk(risk.id)" />
+              <input
+                type="checkbox"
+                [checked]="isDefaultRisk(risk) || selectedRiskIds().includes(risk.id)"
+                [disabled]="isDefaultRisk(risk)"
+                (change)="toggleRisk(risk.id)"
+              />
               <strong>{{ risk.name }}</strong>
+              @if (isDefaultRisk(risk)) {
+                <small>Repli automatique pour les ports sans risque spécifique.</small>
+              }
               <small>Activité : {{ risk.activity_name }}</small>
               <span class="badge warning">{{ risk.default_severity }}</span>
               <small>Impact : {{ risk.impact }}</small>
@@ -309,7 +317,7 @@ export class BulletinCreatePageComponent implements OnInit {
     if (!this.structureId) return 'Sélectionne la structure du bulletin.';
     if (!this.selectedPeerIps().length) return 'Recherche et sélectionne au moins un peer.';
     if (!this.riskProfiles().length) return 'Les profils de risque ne sont pas encore chargés.';
-    if (!this.selectedRiskIds().length) return 'Sélectionne au moins un risque.';
+    if (!this.effectiveRiskIds().length) return 'Aucun profil de risque actif n’est disponible.';
     if (this.uncoveredPeers().length) return 'Sélectionne un risque compatible avec tous les ports des peers.';
     return '';
   }
@@ -325,7 +333,7 @@ export class BulletinCreatePageComponent implements OnInit {
       external_reference: this.externalReference,
       status: this.status,
       peer_ips: this.selectedPeerIps(),
-      risk_profile_ids: this.selectedRiskIds(),
+      risk_profile_ids: this.effectiveRiskIds(),
       force_duplicate: this.forceDuplicate,
     };
     if (this.severity) {
@@ -362,7 +370,8 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   uncoveredPeers() {
-    const selectedRisks = this.riskProfiles().filter((risk) => this.selectedRiskIds().includes(risk.id));
+    const effectiveIds = this.effectiveRiskIds();
+    const selectedRisks = this.riskProfiles().filter((risk) => effectiveIds.includes(risk.id));
     return this.peerRows().filter((peer) => {
       if (!this.selectedPeerIps().includes(peer.peer_ip)) return false;
       const ports: Array<number | null> = peer.host_ports.length ? peer.host_ports : [null];
@@ -370,6 +379,15 @@ export class BulletinCreatePageComponent implements OnInit {
         (risk) => risk.port_services.length === 0 || risk.port_services.some((item) => item.port === port)
       ));
     });
+  }
+
+  isDefaultRisk(risk: RiskProfile) {
+    return risk.source_key === 'system-default-unclassified-risk';
+  }
+
+  private effectiveRiskIds() {
+    const defaultRiskIds = this.riskProfiles().filter((risk) => this.isDefaultRisk(risk)).map((risk) => risk.id);
+    return [...new Set([...this.selectedRiskIds(), ...defaultRiskIds])];
   }
 
   private groupObservations(observations: PeerObservation[]): BulletinPeerRow[] {
