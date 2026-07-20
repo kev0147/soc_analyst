@@ -902,6 +902,31 @@ class IPAnalysisRecordsApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("structure_id", response.json())
 
+    def test_source_states_are_available_when_no_quota_has_been_recorded(self):
+        response = self.client.get("/api/v1/ip-analysis/source-states/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [item["source"] for item in response.json()["results"]],
+            [ReputationSource.ABUSEIPDB, ReputationSource.VIRUSTOTAL],
+        )
+        self.assertTrue(all(not item["quota_exhausted"] for item in response.json()["results"]))
+
+    def test_source_states_report_an_exhausted_quota(self):
+        ReputationSourceState.objects.create(
+            source=ReputationSource.ABUSEIPDB,
+            quota_exhausted_until=timezone.now() + timedelta(hours=1),
+            last_http_status=429,
+            last_error_message="Quota API épuisé.",
+        )
+
+        response = self.client.get("/api/v1/ip-analysis/source-states/")
+
+        self.assertEqual(response.status_code, 200)
+        abuse_state = response.json()["results"][0]
+        self.assertTrue(abuse_state["quota_exhausted"])
+        self.assertEqual(abuse_state["last_http_status"], 429)
+
 
 class FlowExplorationTests(TestCase):
     def setUp(self):
