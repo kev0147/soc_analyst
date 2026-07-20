@@ -210,7 +210,7 @@ export class BulletinCreatePageComponent implements OnInit {
       this.structures.set(data.results);
       if (data.results.length && !this.structureId) this.structureId = data.results[0].id;
     });
-    this.api.riskProfiles({ is_active: true }).subscribe((data) => {
+    this.api.riskProfiles({ is_active: true, limit: 500 }).subscribe((data) => {
       this.riskProfiles.set(data.results);
       const defaultRisk = data.results.find((risk) => risk.source_key === 'system-default-unclassified-risk');
       if (defaultRisk && !this.selectedRiskIds().includes(defaultRisk.id)) {

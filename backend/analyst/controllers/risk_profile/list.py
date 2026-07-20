@@ -2,14 +2,22 @@ from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
 from django.db.models import Prefetch
+from rest_framework.pagination import PageNumberPagination
 
 from analyst.models import RiskProfile, RiskProfileIndicator
 from analyst.serializers import RiskProfileSerializer
 
 
+class RiskProfilePagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = "limit"
+    max_page_size = 500
+
+
 class RiskProfileListController(generics.ListAPIView):
     serializer_class = RiskProfileSerializer
     permission_classes = (IsAuthenticated,)
+    pagination_class = RiskProfilePagination
 
     def get_queryset(self):
         queryset = RiskProfile.objects.select_related("activity").prefetch_related(
