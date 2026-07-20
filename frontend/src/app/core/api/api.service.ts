@@ -12,6 +12,7 @@ import {
   Flow,
   FlowImport,
   IpAnalysisRecord,
+  IpReputationSourceState,
   MaliciousCommunicationAnalysis,
   Network,
   NetworkCidr,
@@ -187,6 +188,10 @@ export class ApiService {
 
   retryBackgroundJob(id: string): Observable<BackgroundJob> {
     return this.http.post<BackgroundJob>(`${this.baseUrl}/background-jobs/${id}/retry/`, {});
+  }
+
+  ipAnalysisSourceStates(): Observable<{ results: IpReputationSourceState[] }> {
+    return this.http.get<{ results: IpReputationSourceState[] }>(`${this.baseUrl}/ip-analysis/source-states/`);
   }
 
   cancelBackgroundJob(id: string): Observable<BackgroundJob> {

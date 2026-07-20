@@ -34,6 +34,7 @@ from .models import (
     PeerObservation,
     PeerObservationRisk,
     RecommendationCatalog,
+    ReputationSourceState,
     RiskCatalog,
     RiskIndicator,
     RiskProfile,
@@ -1548,6 +1549,75 @@ class IPReputationTests(TestCase):
         )
         self.assertEqual(forced_run["candidate_count"], 2)
         self.assertEqual(forced_run["source_analysis_count"], 2)
+
+    def test_quota_exhaustion_blocks_source_and_preserves_last_success(self):
+        for ip in ("198.51.100.25", "203.0.113.50"):
+            reputation = IPReputation.objects.create(ip_address=ip)
+            IPReputationResult.objects.create(
+                reputation=reputation,
+                source=ReputationSource.ABUSEIPDB,
+                status=ReputationStatus.SUCCESS,
+                verdict=ReputationVerdict.SUSPICIOUS,
+                score=55,
+                country="BF",
+                analyzed_at=timezone.now() - timedelta(days=2),
+                expires_at=timezone.now() - timedelta(hours=1),
+            )
+
+        class QuotaAbuse:
+            calls = 0
+
+            def analyze(self, ip):
+                QuotaAbuse.calls += 1
+                return ReputationClientResult(
+                    source=ReputationSource.ABUSEIPDB,
+                    status=ReputationStatus.ERROR,
+                    verdict=ReputationVerdict.UNKNOWN,
+                    score=None,
+                    country="",
+                    raw={},
+                    error_message="Quota API épuisé (HTTP 429).",
+                    analyzed_at=timezone.now(),
+                    quota_exhausted_until=timezone.now() + timedelta(hours=24),
+                    http_status=429,
+                )
+
+        class WorkingVirusTotal:
+            calls = 0
+
+            def analyze(self, ip):
+                WorkingVirusTotal.calls += 1
+                return ReputationClientResult(
+                    source=ReputationSource.VIRUSTOTAL,
+                    status=ReputationStatus.SUCCESS,
+                    verdict=ReputationVerdict.CLEAN,
+                    score=0,
+                    country="FR",
+                    raw={},
+                    error_message="",
+                    analyzed_at=timezone.now(),
+                )
+
+        result = run_reputation_analysis(
+            tools=[ReputationSource.ABUSEIPDB, ReputationSource.VIRUSTOTAL],
+            limit=10,
+            client_classes={
+                ReputationSource.ABUSEIPDB: QuotaAbuse,
+                ReputationSource.VIRUSTOTAL: WorkingVirusTotal,
+            },
+        )
+
+        self.assertEqual(QuotaAbuse.calls, 1)
+        self.assertEqual(WorkingVirusTotal.calls, 2)
+        self.assertEqual(result["source_states"][0]["last_http_status"], 429)
+        state = ReputationSourceState.objects.get(source=ReputationSource.ABUSEIPDB)
+        self.assertGreater(state.quota_exhausted_until, timezone.now())
+        preserved = IPReputationResult.objects.get(
+            reputation__ip_address="198.51.100.25",
+            source=ReputationSource.ABUSEIPDB,
+        )
+        self.assertEqual(preserved.status, ReputationStatus.SUCCESS)
+        self.assertEqual(preserved.score, 55)
 
     def test_candidate_freshness_skips_fresh_results_and_prioritizes_expired_results(self):
         fresh_reputation = IPReputation.objects.create(ip_address="203.0.113.50")

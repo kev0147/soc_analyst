@@ -103,6 +103,7 @@ from analyst.controllers.analytics.malicious_communications import MaliciousComm
 from analyst.controllers.dashboard.overview import DashboardOverviewController
 from analyst.controllers.security.permission_matrix import PermissionMatrixController
 from analyst.controllers.ip_analysis.records import IPAnalysisRecordsController
+from analyst.controllers.ip_analysis.source_states import IPAnalysisSourceStatesController
 from analyst.controllers.ip_analysis.run import IPAnalysisRunController
 from analyst.controllers.ip_analysis.candidates import IPAnalysisCandidatesController
 from analyst.controllers.risk_profile.list import RiskProfileListController
@@ -185,6 +186,7 @@ urlpatterns = [
     path("flows/<int:pk>/", FlowRetrieveController.as_view(), name="flow-retrieve"),
     path("ips/<str:ip>/timeline/", IPTimelineController.as_view(), name="ip-timeline"),
     path("ip-analysis/records/", IPAnalysisRecordsController.as_view(), name="ip-analysis-records"),
+    path("ip-analysis/source-states/", IPAnalysisSourceStatesController.as_view(), name="ip-analysis-source-states"),
     path("ip-analysis/run/", IPAnalysisRunController.as_view(), name="ip-analysis-run"),
     path("ip-analysis/candidates/", IPAnalysisCandidatesController.as_view(), name="ip-analysis-candidates"),
     path("analytics/top-talkers/", TopTalkersController.as_view(), name="top-talkers"),

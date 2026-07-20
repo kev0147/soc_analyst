@@ -7,7 +7,7 @@ from django.conf import settings
 from django.db import connection
 from django.utils import timezone
 
-from analyst.models import Flow, FlowImport, IPReputation, IPReputationResult
+from analyst.models import Flow, FlowImport, IPReputation, IPReputationResult, ReputationSourceState
 from analyst.models.choices import ReputationSource, ReputationStatus
 from analyst.services.imports.flow_mapper import internal_cidrs_for_structure
 from analyst.services.peer_observations import sync_peer_observations
@@ -153,6 +153,9 @@ def _result_expiry(result: ReputationClientResult):
 
 
 def _upsert_result(reputation: IPReputation, result: ReputationClientResult):
+    existing = IPReputationResult.objects.filter(reputation=reputation, source=result.source).first()
+    if existing and existing.status == ReputationStatus.SUCCESS and result.status != ReputationStatus.SUCCESS:
+        return existing
     IPReputationResult.objects.update_or_create(
         reputation=reputation,
         source=result.source,
@@ -184,6 +187,36 @@ def _refresh_reputation(reputation: IPReputation, candidate: CandidateIP):
     reputation.save()
 
 
+def _active_source_blocks(tools: list[str]) -> dict[str, ReputationSourceState]:
+    return {
+        item.source: item
+        for item in ReputationSourceState.objects.filter(
+            source__in=tools,
+            quota_exhausted_until__gt=timezone.now(),
+        )
+    }
+
+
+def _record_quota_exhaustion(result: ReputationClientResult) -> ReputationSourceState:
+    state, _ = ReputationSourceState.objects.update_or_create(
+        source=result.source,
+        defaults={
+            "quota_exhausted_until": result.quota_exhausted_until,
+            "last_http_status": result.http_status,
+            "last_error_message": result.error_message,
+        },
+    )
+    return state
+
+
+def _clear_source_error(source: str):
+    ReputationSourceState.objects.filter(source=source).update(
+        quota_exhausted_until=None,
+        last_http_status=None,
+        last_error_message="",
+    )
+
+
 def run_reputation_analysis(
     scope: str = "all_flows",
     import_id: int | None = None,
@@ -194,13 +227,15 @@ def run_reputation_analysis(
     force_refresh: bool = False,
 ) -> dict:
     selected_tools = _enabled_tools(tools)
+    source_blocks = _active_source_blocks(selected_tools)
+    available_tools = [tool for tool in selected_tools if tool not in source_blocks]
     candidates = candidate_ips(
         scope=scope,
         import_id=import_id,
         limit=limit,
-        tools=selected_tools,
+        tools=available_tools,
         force_refresh=force_refresh,
-    )
+    ) if available_tools else []
     clients = client_classes or CLIENTS
     analyzed = []
     source_analysis_count = 0
@@ -210,22 +245,27 @@ def run_reputation_analysis(
 
     for index, candidate in enumerate(candidates, start=1):
         reputation, _ = IPReputation.objects.get_or_create(ip_address=candidate.ip_address)
+        refreshed_tools = []
         for tool in candidate.due_tools:
-            client = clients[tool]()
-            result = client.analyze(candidate.ip_address)
-            _upsert_result(reputation, result)
+            if tool in source_blocks:
+                continue
+            result = clients[tool]().analyze(candidate.ip_address)
             source_analysis_count += 1
+            if result.quota_exhausted_until:
+                source_blocks[tool] = _record_quota_exhaustion(result)
+                continue
+            _upsert_result(reputation, result)
+            refreshed_tools.append(tool)
+            if result.status == ReputationStatus.SUCCESS:
+                _clear_source_error(tool)
         _refresh_reputation(reputation, candidate)
-        analyzed.append((reputation, candidate.due_tools))
+        analyzed.append((reputation, tuple(refreshed_tools)))
         if progress_callback:
             progress_callback(index, len(candidates), f"Analyse de {candidate.ip_address}")
 
     if progress_callback:
         progress_callback(len(candidates), len(candidates), "Synchronisation des observations")
-    observation_sync = sync_peer_observations(
-        scope="all_flows",
-        progress_callback=progress_callback,
-    )
+    observation_sync = sync_peer_observations(scope="all_flows", progress_callback=progress_callback)
 
     return {
         "scope": scope,
@@ -235,6 +275,15 @@ def run_reputation_analysis(
         "candidate_count": len(candidates),
         "analyzed_count": len(analyzed),
         "source_analysis_count": source_analysis_count,
+        "source_states": [
+            {
+                "source": source,
+                "quota_exhausted_until": state.quota_exhausted_until.isoformat() if state.quota_exhausted_until else None,
+                "last_http_status": state.last_http_status,
+                "last_error_message": state.last_error_message,
+            }
+            for source, state in source_blocks.items()
+        ],
         "observation_sync": observation_sync,
         "records": [
             {

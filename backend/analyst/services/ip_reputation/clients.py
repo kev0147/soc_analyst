@@ -1,7 +1,10 @@
 import json
 import urllib.parse
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import timedelta
+from email.utils import parsedate_to_datetime
 
 from django.conf import settings
 from django.utils import timezone
@@ -21,9 +24,11 @@ class ReputationClientResult:
     raw: dict
     error_message: str
     analyzed_at: object
+    quota_exhausted_until: object | None = None
+    http_status: int | None = None
 
 
-def _now_result(source: str, status: str, verdict: str, score=None, country="", raw=None, error_message=""):
+def _now_result(source: str, status: str, verdict: str, score=None, country="", raw=None, error_message="", quota_exhausted_until=None, http_status=None):
     return ReputationClientResult(
         source=source,
         status=status,
@@ -33,6 +38,41 @@ def _now_result(source: str, status: str, verdict: str, score=None, country="", 
         raw=raw or {},
         error_message=error_message,
         analyzed_at=timezone.now(),
+        quota_exhausted_until=quota_exhausted_until,
+        http_status=http_status,
+    )
+
+
+def _quota_reset_at(exc: urllib.error.HTTPError):
+    value = exc.headers.get("Retry-After") if exc.headers else None
+    if value:
+        try:
+            return timezone.now() + timedelta(seconds=max(int(value), 1))
+        except (TypeError, ValueError):
+            try:
+                parsed = parsedate_to_datetime(value)
+                return parsed if parsed.tzinfo else timezone.make_aware(parsed)
+            except (TypeError, ValueError, OverflowError):
+                pass
+    return timezone.now() + timedelta(hours=24)
+
+
+def _http_error_result(source: str, exc: urllib.error.HTTPError):
+    if exc.code == 429:
+        return _now_result(
+            source,
+            ReputationStatus.ERROR,
+            ReputationVerdict.UNKNOWN,
+            error_message="Quota API épuisé (HTTP 429).",
+            quota_exhausted_until=_quota_reset_at(exc),
+            http_status=429,
+        )
+    return _now_result(
+        source,
+        ReputationStatus.ERROR,
+        ReputationVerdict.UNKNOWN,
+        error_message=f"Erreur HTTP {exc.code}.",
+        http_status=exc.code,
     )
 
 
@@ -65,6 +105,8 @@ class AbuseIPDBClient:
                 country=(data.get("countryCode") or "").upper(),
                 raw=raw,
             )
+        except urllib.error.HTTPError as exc:
+            return _http_error_result(self.source, exc)
         except Exception as exc:
             return _now_result(self.source, ReputationStatus.ERROR, ReputationVerdict.UNKNOWN, error_message=str(exc))
 
@@ -96,6 +138,8 @@ class VirusTotalClient:
                 country=(attributes.get("country") or "").upper(),
                 raw=raw,
             )
+        except urllib.error.HTTPError as exc:
+            return _http_error_result(self.source, exc)
         except Exception as exc:
             return _now_result(self.source, ReputationStatus.ERROR, ReputationVerdict.UNKNOWN, error_message=str(exc))
 

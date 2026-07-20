@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
-import { IpAnalysisRecord, Structure } from '../../core/api/api.types';
+import { IpAnalysisRecord, IpReputationSourceState, Structure } from '../../core/api/api.types';
 
 @Component({
   selector: 'app-ip-analysis-page',
@@ -56,6 +56,21 @@ import { IpAnalysisRecord, Structure } from '../../core/api/api.types';
           </ol>
           <p class="muted">Par défaut, aucune requête API n'est répétée pour un résultat encore frais.</p>
         </article>
+      </section>
+
+      <section class="grid cols-2">
+        @for (source of sourceStates(); track source.source) {
+          <article class="card">
+            <h3>{{ source.source === 'abuseipdb' ? 'AbuseIPDB' : 'VirusTotal' }}</h3>
+            @if (source.quota_exhausted) {
+              <p><span class="badge danger">Quota épuisé</span></p>
+              <p class="muted">Cette plateforme est suspendue jusqu’au {{ source.quota_exhausted_until | date:'medium' }}. Les autres plateformes continuent.</p>
+            } @else {
+              <p><span class="badge success">Disponible</span></p>
+            }
+            @if (source.last_error_message) { <p class="muted">{{ source.last_error_message }}</p> }
+          </article>
+        }
       </section>
 
       <section class="card">
@@ -132,6 +147,7 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
   readonly message = signal('');
   readonly records = signal<IpAnalysisRecord[]>([]);
   readonly structures = signal<Structure[]>([]);
+  readonly sourceStates = signal<IpReputationSourceState[]>([]);
   scope: 'all_flows' | 'import' = 'all_flows';
   importId: number | null = null;
   structureId: number | null = null;
@@ -146,6 +162,7 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.api.structures().subscribe((data) => this.structures.set(data.results));
+    this.loadSourceStates();
     this.load();
   }
 
@@ -174,7 +191,7 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
         next: (job) => {
           const progress = job.progress_percent === null ? job.progress_current : `${job.progress_percent}%`;
           this.message.set(job.status === 'failed' ? `Échec : ${job.error_message}` : `${job.status_message || job.status}${progress ? ` — ${progress}` : ''}`);
-          if (job.status === 'completed') this.load();
+          if (job.status === 'completed') { this.load(); this.loadSourceStates(); }
           if (job.status === 'queued' || job.status === 'running') this.poll(job.id);
         },
         error: () => this.message.set('Impossible de suivre le job.'),
@@ -197,6 +214,13 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
         this.message.set(`${data.count} résultat(s).`);
       },
       error: () => this.message.set('Chargement impossible. Vérifie que le backend tourne.'),
+    });
+  }
+
+  private loadSourceStates() {
+    this.api.ipAnalysisSourceStates().subscribe({
+      next: (data) => this.sourceStates.set(data.results),
+      error: () => this.message.set('Impossible de charger l’état des quotas API.'),
     });
   }
 

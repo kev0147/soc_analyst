@@ -23,6 +23,7 @@ from .password_reset_token import PasswordResetToken
 from .peer_observation import PeerObservation
 from .peer_observation_risk import PeerObservationRisk
 from .recommendation_catalog import RecommendationCatalog
+from .reputation_source_state import ReputationSourceState
 from .risk_catalog import RiskCatalog
 from .risk_indicator import RiskIndicator
 from .risk_profile import RiskProfile
@@ -57,6 +58,7 @@ __all__ = [
     "PeerObservation",
     "PeerObservationRisk",
     "RecommendationCatalog",
+    "ReputationSourceState",
     "RiskCatalog",
     "RiskIndicator",
     "RiskProfile",

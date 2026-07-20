@@ -353,6 +353,14 @@ export interface IpAnalysisRecord {
   }>;
 }
 
+export interface IpReputationSourceState {
+  source: 'abuseipdb' | 'virustotal';
+  quota_exhausted: boolean;
+  quota_exhausted_until: string | null;
+  last_http_status: number | null;
+  last_error_message: string;
+}
+
 export interface DetectionRule {
   id: number;
   code: string;
