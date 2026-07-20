@@ -107,13 +107,16 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                 <strong class="peer-ip">{{ peer.peer_ip }}</strong>
                 <span>{{ peer.country || 'Pays inconnu' }}</span>
               </div>
-              <span class="badge" [class.danger]="peer.verdict === 'malicious'" [class.warning]="peer.verdict === 'suspicious'" [class.success]="peer.verdict === 'clean'">
-                {{ peer.verdict }} · {{ peer.score ?? '-' }}
-              </span>
-              <span>{{ peer.host_count }} hôte(s)</span>
-              <span>{{ peer.flow_count }} flow(s)</span>
-              <span>{{ bytes(peer.total_bytes) }}</span>
-              <span>{{ duration(peer.total_duration_seconds) }}</span>
+              <div>
+                <span class="badge" [class.danger]="peer.verdict === 'malicious'" [class.warning]="peer.verdict === 'suspicious'" [class.success]="peer.verdict === 'clean'">
+                  {{ peer.verdict }} · score {{ peer.score ?? '-' }}
+                </span>
+                <small class="muted">{{ peer.successful_source_count }}/{{ peer.source_count }} source(s) réussie(s)</small>
+              </div>
+              <div><small class="muted">Hôtes</small><strong>{{ peer.host_count }}</strong></div>
+              <div><small class="muted">Flows</small><strong>{{ peer.flow_count }}</strong></div>
+              <div><small class="muted">Volume</small><strong>{{ bytes(peer.total_bytes) }}</strong></div>
+              <div><small class="muted">Durée totale</small><strong>{{ duration(peer.total_duration_seconds) }}</strong></div>
               <button
                 class="btn secondary"
                 (click)="togglePeer(peer)"
@@ -121,6 +124,26 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
               >
                 {{ peerSelected(peer) ? 'Retirer les communications' : 'Sélectionner les communications' }}
               </button>
+            </div>
+
+            <div class="peer-metrics">
+              <span><small>Paquets</small><strong>{{ peer.total_packets }}</strong></span>
+              <span><small>Durée moyenne</small><strong>{{ duration(peer.avg_duration_seconds) }}</strong></span>
+              <span><small>Durée maximale</small><strong>{{ duration(peer.max_duration_seconds) }}</strong></span>
+              <span><small>Première activité</small><strong>{{ peer.first_seen ? (peer.first_seen | date:'medium') : '-' }}</strong></span>
+              <span><small>Dernière activité</small><strong>{{ peer.last_seen ? (peer.last_seen | date:'medium') : '-' }}</strong></span>
+            </div>
+
+            <div class="reputation-details">
+              <strong>Réputation</strong>
+              @for (result of peer.reputation_results; track result.source) {
+                <span>
+                  {{ result.source }} : {{ result.status }} · {{ result.verdict }} · score {{ result.score ?? '-' }}
+                  @if (result.country) { · {{ result.country }} }
+                </span>
+              } @empty {
+                <span class="muted">Aucun résultat détaillé de réputation.</span>
+              }
             </div>
 
             <details>
@@ -134,8 +157,10 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                       <th>Port/service</th>
                       <th>Catégorie</th>
                       <th>Flows</th>
+                      <th>Paquets</th>
                       <th>Volume</th>
                       <th>Durée</th>
+                      <th>Première activité</th>
                       <th>Dernière activité</th>
                     </tr>
                   </thead>
@@ -147,12 +172,14 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                         <td>{{ observation.host_port ?? '-' }} / {{ observation.host_service || '-' }}</td>
                         <td>{{ observation.host_port_category || '-' }}</td>
                         <td>{{ observation.flow_count }}</td>
+                        <td>{{ observation.total_packets }}</td>
                         <td>{{ bytes(observation.total_bytes) }}</td>
                         <td>{{ duration(observation.total_duration_seconds) }}</td>
+                        <td>{{ observation.first_seen_at ? (observation.first_seen_at | date:'medium') : '-' }}</td>
                         <td>{{ observation.last_seen_at ? (observation.last_seen_at | date:'medium') : '-' }}</td>
                       </tr>
                     } @empty {
-                      <tr><td colspan="8"><div class="empty">Aucune observation synchronisée. Lance une analyse IP pour cette peer.</div></td></tr>
+                      <tr><td colspan="10"><div class="empty">Aucune observation synchronisée. Lance une analyse IP pour cette peer.</div></td></tr>
                     }
                   </tbody>
                 </table>
@@ -175,9 +202,16 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
       align-items: center;
     }
     .peer-summary > div { display: grid; gap: 4px; }
+    .peer-metrics { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 10px; }
+    .peer-metrics span { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
+    .peer-metrics small { color: var(--muted); }
+    .reputation-details { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
     .peer-ip { font-size: 18px; }
     summary { cursor: pointer; color: var(--muted); }
-    @media (max-width: 1100px) { .peer-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 1100px) {
+      .peer-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .peer-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
   `,
 })
 export class InvestigationPageComponent implements OnInit {

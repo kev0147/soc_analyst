@@ -138,6 +138,11 @@ def top_ports_protocols(params) -> dict:
 def top_peers(params) -> dict:
     limit = limit_param(params)
     stats = collect_peer_observation_stats(_filtered_flows(params))
+    imported_countries = {}
+    for key, item in stats.items():
+        peer_ip = key[1]
+        if item.get("peer_country") and not imported_countries.get(peer_ip):
+            imported_countries[peer_ip] = item["peer_country"]
     reputations = {}
     peer_ips = list({key[1] for key in stats.keys()})
     max_query_params = connection.features.max_query_params
@@ -155,6 +160,7 @@ def top_peers(params) -> dict:
             "score": None,
             "source_count": 0,
             "successful_source_count": 0,
+            "reputation_results": [],
             "flow_count": 0,
             "total_bytes": 0,
             "total_packets": 0,
@@ -189,13 +195,24 @@ def top_peers(params) -> dict:
         row = rows[peer_ip]
         row["peer_ip"] = peer_ip
         if reputation:
-            row["country"] = reputation.country or row["country"] or item.get("peer_country", "")
+            row["country"] = imported_countries.get(peer_ip) or reputation.country or row["country"]
             row["verdict"] = reputation.verdict
             row["score"] = reputation.score
             row["source_count"] = reputation.source_count
             row["successful_source_count"] = reputation.successful_source_count
-        elif item.get("peer_country"):
-            row["country"] = item["peer_country"]
+            row["reputation_results"] = [
+                {
+                    "source": result.source,
+                    "status": result.status,
+                    "verdict": result.verdict,
+                    "score": result.score,
+                    "country": result.country,
+                    "analyzed_at": result.analyzed_at.isoformat() if result.analyzed_at else None,
+                }
+                for result in reputation.results.all()
+            ]
+        elif imported_countries.get(peer_ip):
+            row["country"] = imported_countries[peer_ip]
         row["flow_count"] += item["flow_count"]
         row["total_bytes"] += item["total_bytes"]
         row["total_packets"] += item["total_packets"]

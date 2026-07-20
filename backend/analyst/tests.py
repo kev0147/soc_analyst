@@ -1568,6 +1568,11 @@ class IPReputationTests(TestCase):
         self.assertEqual(observation.total_duration_seconds, 120)
         self.assertEqual(observation.peer_reputation.flow_count, 0)
 
+        second_result = sync_peer_observations()
+        self.assertEqual(second_result["created_count"], 0)
+        self.assertEqual(second_result["updated_count"], 2)
+        self.assertEqual(PeerObservation.objects.count(), 2)
+
     def test_import_scoped_sync_keeps_global_observation_totals(self):
         flow_import = FlowImport.objects.create(
             structure=self.structure,
@@ -1588,6 +1593,8 @@ class IPReputationTests(TestCase):
         self.assertEqual(PeerObservation.objects.count(), 2)
 
     def test_top_peers_filters_recent_period_and_orders_by_duration(self):
+        self.flow_b.dst_location = "Canada"
+        self.flow_b.save(update_fields=("dst_location",))
         IPReputation.objects.create(
             ip_address="198.51.100.25",
             verdict=ReputationVerdict.MALICIOUS,
@@ -1619,7 +1626,8 @@ class IPReputationTests(TestCase):
         peer = result["results"][0]
         self.assertEqual(peer["peer_ip"], "198.51.100.25")
         self.assertEqual(peer["verdict"], ReputationVerdict.MALICIOUS)
-        self.assertEqual(peer["country"], "BF")
+        self.assertEqual(peer["country"], "Canada")
+        self.assertEqual(peer["reputation_results"], [])
         self.assertEqual(peer["total_duration_seconds"], 900)
         self.assertEqual(peer["host_ips"], ["10.0.0.11"])
 

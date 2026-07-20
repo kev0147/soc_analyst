@@ -114,7 +114,12 @@ def _run(job: BackgroundJob) -> dict:
             progress_callback=lambda current, total, message: _progress(str(job.id), current, total, message),
         )
         result = _flow_import_result(confirmed)
-        result["observation_sync"] = sync_peer_observations(scope="all_flows")
+        result["observation_sync"] = sync_peer_observations(
+            scope="all_flows",
+            progress_callback=lambda current, total, message: _progress(
+                str(job.id), current, total, message
+            ),
+        )
         return result
 
     if job.kind == BackgroundJobKind.IP_REPUTATION:

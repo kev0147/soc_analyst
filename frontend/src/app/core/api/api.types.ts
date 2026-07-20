@@ -283,6 +283,14 @@ export interface TopPeer {
   score: number | null;
   source_count: number;
   successful_source_count: number;
+  reputation_results: Array<{
+    source: string;
+    status: string;
+    verdict: string;
+    score: number | null;
+    country: string;
+    analyzed_at: string | null;
+  }>;
   flow_count: number;
   total_bytes: number;
   total_packets: number;
