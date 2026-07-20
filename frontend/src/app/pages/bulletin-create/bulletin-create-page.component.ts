@@ -1,8 +1,9 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { forkJoin } from 'rxjs';
 import { ApiService } from '../../core/api/api.service';
-import { Network, PeerObservation, RiskProfile, Structure, TopPeer } from '../../core/api/api.types';
+import { Network, PeerObservation, RiskProfile, Structure } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
 
 interface BulletinPeerRow {
@@ -27,7 +28,7 @@ interface BulletinPeerRow {
       <div class="page-title">
         <div>
           <h1>Créer un bulletin</h1>
-          <p>Un peer peut concerner plusieurs hôtes et ports. Sélectionne les communications à documenter.</p>
+          <p>Sélectionne les peers à documenter. Tous leurs hôtes, ports et agrégats synchronisés seront inclus automatiquement.</p>
         </div>
         <a class="btn secondary" routerLink="/investigation">Choisir des peers</a>
       </div>
@@ -133,7 +134,10 @@ interface BulletinPeerRow {
 
       <section class="card toolbar">
         <label><input type="checkbox" [(ngModel)]="forceDuplicate" /> Forcer si doublon</label>
-        <button class="btn" (click)="create()" [disabled]="!canCreate()">Créer le bulletin</button>
+        <button class="btn" (click)="create()">Créer le bulletin</button>
+        @if (creationBlockReason()) {
+          <p class="badge warning">{{ creationBlockReason() }}</p>
+        }
         @if (message()) {
           <p class="muted">{{ message() }}</p>
         }
@@ -252,22 +256,26 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   private addPeers(peerIps: string[], announce: boolean) {
-    this.api.topPeers({
-      peer_ips: peerIps.join(','),
+    const searches = peerIps.map((peerIp) => this.api.peerObservationSuggestions({
+      peer_ip: peerIp,
       structure_id: this.structureId || null,
-      sort: 'verdict',
-      include_observations: false,
-      limit: Math.min(Math.max(peerIps.length, 1), 100),
-    }).subscribe({
-      next: (data) => {
-        if (!data.results.length) {
+      limit: 500,
+    }));
+    forkJoin(searches).subscribe({
+      next: (responses) => {
+        const observations = responses.flatMap((data) => data.results);
+        if (!observations.length) {
           this.message.set('Aucun peer trouvé pour ces adresses IP et cette structure.');
           return;
         }
-        const rows = data.results.map((peer) => this.fromTopPeer(peer));
+        const rows = this.groupObservations(observations);
         const returnedIps = new Set(rows.map((row) => row.peer_ip));
         this.peerRows.set([...this.peerRows().filter((item) => !returnedIps.has(item.peer_ip)), ...rows]);
         this.selectedPeerIps.set([...new Set([...this.selectedPeerIps(), ...returnedIps])]);
+        this.observations.set([
+          ...this.observations().filter((item) => !returnedIps.has(item.peer_ip)),
+          ...observations,
+        ]);
         if (announce) this.message.set(`${rows.length} peer(s) ajouté(s).`);
       },
       error: (error) => this.message.set(this.errorMessage(error, 'Recherche impossible.')),
@@ -297,11 +305,21 @@ export class BulletinCreatePageComponent implements OnInit {
     this.selectedRiskIds.set([...selected]);
   }
 
-  canCreate() {
-    return this.structureId && this.selectedPeerIps().length > 0 && this.selectedRiskIds().length > 0 && this.uncoveredPeers().length === 0;
+  creationBlockReason() {
+    if (!this.structureId) return 'Sélectionne la structure du bulletin.';
+    if (!this.selectedPeerIps().length) return 'Recherche et sélectionne au moins un peer.';
+    if (!this.riskProfiles().length) return 'Les profils de risque ne sont pas encore chargés.';
+    if (!this.selectedRiskIds().length) return 'Sélectionne au moins un risque.';
+    if (this.uncoveredPeers().length) return 'Sélectionne un risque compatible avec tous les ports des peers.';
+    return '';
   }
 
   create() {
+    const blockedBy = this.creationBlockReason();
+    if (blockedBy) {
+      this.message.set(blockedBy);
+      return;
+    }
     const payload: Record<string, unknown> = {
       structure_id: this.structureId,
       external_reference: this.externalReference,
@@ -352,21 +370,6 @@ export class BulletinCreatePageComponent implements OnInit {
         (risk) => risk.port_services.length === 0 || risk.port_services.some((item) => item.port === port)
       ));
     });
-  }
-
-  private fromTopPeer(peer: TopPeer): BulletinPeerRow {
-    return {
-      peer_ip: peer.peer_ip,
-      country: peer.country,
-      verdict: peer.verdict,
-      score: peer.score,
-      host_ips: peer.host_ips,
-      host_ports: peer.host_ports,
-      flow_count: peer.flow_count,
-      total_packets: peer.total_packets,
-      total_bytes: peer.total_bytes,
-      total_duration_seconds: peer.total_duration_seconds,
-    };
   }
 
   private groupObservations(observations: PeerObservation[]): BulletinPeerRow[] {
