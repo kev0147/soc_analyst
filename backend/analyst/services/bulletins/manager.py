@@ -105,8 +105,17 @@ def create_bulletin_from_findings(data: dict, user, force_duplicate: bool = Fals
         structure_id=data["structure"].id,
         peer_ips={observation.peer_ip for observation in observations},
     )
-    duplicate_ids = {item["id"] for item in duplicates}
-    duplicates.extend(item for item in history_duplicates if item["id"] not in duplicate_ids)
+    duplicates_by_id = {item["id"]: item for item in duplicates}
+    for history_duplicate in history_duplicates:
+        existing = duplicates_by_id.get(history_duplicate["id"])
+        if existing:
+            existing.update({
+                "external_reference": history_duplicate["external_reference"],
+                "matched_peer_ips": history_duplicate["matched_peer_ips"],
+                "match_reason": history_duplicate["match_reason"],
+            })
+        else:
+            duplicates.append(history_duplicate)
     if duplicates and not force_duplicate:
         return None, duplicates
 

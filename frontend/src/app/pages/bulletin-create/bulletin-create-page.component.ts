@@ -19,6 +19,14 @@ interface BulletinPeerRow {
   total_duration_seconds: number;
 }
 
+interface BulletinDuplicate {
+  reference: string;
+  external_reference?: string;
+  sent_at?: string | null;
+  created_at?: string | null;
+  matched_peer_ips?: string[];
+}
+
 @Component({
   selector: 'app-bulletin-create-page',
   standalone: true,
@@ -132,6 +140,28 @@ interface BulletinPeerRow {
           <p class="muted">{{ message() }}</p>
         }
       </section>
+
+      @if (duplicateWarnings().length) {
+        <section class="card">
+          <h2>IPs déjà documentées</h2>
+          <p class="muted">Ces IPs figurent dans des bulletins existants.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>IP</th><th>Référence</th><th>Date</th></tr></thead>
+              <tbody>
+                @for (duplicate of duplicateWarnings(); track duplicate.reference) {
+                  <tr>
+                    <td>{{ duplicate.matched_peer_ips?.join(', ') || '-' }}</td>
+                    <td>{{ duplicate.external_reference || duplicate.reference }}</td>
+                    <td>{{ duplicateDate(duplicate) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <button class="btn" (click)="createWithoutDuplicatePeers()">Créer uniquement avec les nouvelles IP</button>
+        </section>
+      }
     </div>
   `,
   styles: `
@@ -161,6 +191,7 @@ export class BulletinCreatePageComponent implements OnInit {
   readonly riskProfiles = signal<RiskProfile[]>([]);
   readonly selectedObservationIds = signal<number[]>([]);
   readonly selectedPeerIps = signal<string[]>([]);
+  readonly duplicateWarnings = signal<BulletinDuplicate[]>([]);
   readonly message = signal('');
   readonly bytes = formatBytes;
   readonly duration = formatDuration;
@@ -313,12 +344,32 @@ export class BulletinCreatePageComponent implements OnInit {
       next: () => this.router.navigateByUrl('/bulletins'),
       error: (error) => {
         if (error.status === 409) {
-          this.message.set('Doublon détecté. Coche “Forcer si doublon” si tu veux créer quand même.');
+          const duplicates = Array.isArray(error?.error?.duplicates) ? error.error.duplicates : [];
+          this.duplicateWarnings.set(duplicates);
+          this.message.set('Certaines IPs sont déjà documentées. Tu peux créer le bulletin uniquement avec les nouvelles IP.');
         } else {
           this.message.set(this.errorMessage(error, 'Création impossible. Vérifie structure, observations et risques.'));
         }
       },
     });
+  }
+
+  createWithoutDuplicatePeers() {
+    const duplicateIps = new Set(this.duplicateWarnings().flatMap((item) => item.matched_peer_ips || []));
+    const newPeerIps = this.selectedPeerIps().filter((peerIp) => !duplicateIps.has(peerIp));
+    if (!newPeerIps.length) {
+      this.message.set('Toutes les IPs sélectionnées sont déjà documentées. Aucun nouveau bulletin n’est nécessaire.');
+      return;
+    }
+    this.selectedPeerIps.set(newPeerIps);
+    this.duplicateWarnings.set([]);
+    this.forceDuplicate = false;
+    this.create();
+  }
+
+  duplicateDate(duplicate: BulletinDuplicate) {
+    const value = duplicate.sent_at || duplicate.created_at;
+    return value ? new Intl.DateTimeFormat('fr-FR').format(new Date(value)) : '-';
   }
 
   private syncStructureFromNetworkId(networkId: number) {
