@@ -10,6 +10,7 @@ from analyst.models import AuditEvent, BackgroundJob, FlowImport
 from analyst.models.choices import BackgroundJobKind, BackgroundJobStatus, ImportStatus
 from analyst.services.imports import confirm_flow_import
 from analyst.services.ip_reputation import run_reputation_analysis
+from analyst.services.peer_observations import sync_peer_observations
 from analyst.services.daily_aggregates import build_daily_flow_aggregates
 from analyst.services.detections import run_detections
 
@@ -112,7 +113,9 @@ def _run(job: BackgroundJob) -> dict:
             flow_import,
             progress_callback=lambda current, total, message: _progress(str(job.id), current, total, message),
         )
-        return _flow_import_result(confirmed)
+        result = _flow_import_result(confirmed)
+        result["observation_sync"] = sync_peer_observations(scope="all_flows")
+        return result
 
     if job.kind == BackgroundJobKind.IP_REPUTATION:
         payload = job.payload

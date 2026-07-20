@@ -14,12 +14,12 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from .models import (
+    ActivityCatalog,
     AuditEvent,
     Bulletin,
     BulletinFinding,
     BulletinIP,
     BulletinResponse,
-    BulletinTypeCatalog,
     BackgroundJob,
     DailyFlowAggregate,
     DetectionHit,
@@ -104,7 +104,7 @@ class RiskProfileCatalogImportTests(TestCase):
         self.assertEqual(second["updated"], 1)
         self.assertEqual(RiskProfile.objects.count(), 1)
         profile = RiskProfile.objects.get()
-        self.assertEqual(profile.activity, "DDoS")
+        self.assertEqual(profile.activity.name, "DDoS")
         self.assertEqual(
             list(profile.port_services.values_list("port", flat=True)),
             [3389, 5985, 5986],
@@ -137,8 +137,9 @@ class BulletinAssistantTests(TestCase):
             total_bytes=2048,
             total_duration_seconds=300,
         )
+        self.activity = ActivityCatalog.objects.create(name="DDoS")
         self.profile = RiskProfile.objects.create(
-            activity="DDoS",
+            activity=self.activity,
             name="Attaque par brute force",
             impact="Accès non autorisé",
             recommendation="Sécuriser les accès SSH",
@@ -234,6 +235,7 @@ class CoreModelTests(TestCase):
             total_bytes=12000,
         )
         risk_profile = RiskProfile.objects.create(
+            activity=ActivityCatalog.objects.create(name="Accès distant"),
             name="Communication SSH longue avec IP malveillante",
             impact="Risque de compromission ou d'accès distant non autorisé.",
             recommendation="Vérifier la légitimité de la session SSH et restreindre l'accès.",
@@ -262,6 +264,55 @@ class CoreModelTests(TestCase):
         self.assertEqual(finding.severity, BulletinSeverity.HIGH)
         self.assertEqual(finding.impact_snapshot, risk_profile.impact)
         self.assertEqual(finding.recommendation_snapshot, risk_profile.recommendation)
+
+    def test_bulletin_country_falls_back_to_country_observed_in_flow(self):
+        reputation = IPReputation.objects.create(ip_address="198.51.100.70", country="")
+        observation = PeerObservation.objects.create(
+            peer_reputation=reputation,
+            network=self.network,
+            host_ip="192.0.2.10",
+            host_port=22,
+            observed_country="France",
+        )
+        activity = ActivityCatalog.objects.create(name="Accès distant observé")
+        profile = RiskProfile.objects.create(
+            activity=activity,
+            name="Accès distant",
+            impact="Accès non autorisé",
+            recommendation="Restreindre l'accès",
+        )
+        bulletin = Bulletin.objects.create(
+            structure=self.structure,
+            severity=BulletinSeverity.HIGH,
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        finding = BulletinFinding.objects.create(
+            bulletin=bulletin,
+            peer_observation=observation,
+            risk_profile=profile,
+        )
+
+        self.assertEqual(observation.peer_country, "France")
+        self.assertEqual(finding.peer_country_snapshot, "France")
+
+    def test_peer_observation_identity_has_database_constraint(self):
+        constraint_names = {constraint.name for constraint in PeerObservation._meta.constraints}
+        self.assertIn("uniq_peer_observation_endpoint", constraint_names)
+
+    def test_computed_observations_and_findings_have_no_generic_write_routes(self):
+        self.client.force_login(self.user)
+
+        observation_response = self.client.post(
+            "/api/v1/peer-observations/create/", {}, content_type="application/json"
+        )
+        finding_response = self.client.post(
+            "/api/v1/bulletin-findings/create/", {}, content_type="application/json"
+        )
+
+        self.assertEqual(observation_response.status_code, 404)
+        self.assertEqual(finding_response.status_code, 404)
 
 # Create your tests here.
 
@@ -1517,6 +1568,25 @@ class IPReputationTests(TestCase):
         self.assertEqual(observation.total_duration_seconds, 120)
         self.assertEqual(observation.peer_reputation.flow_count, 0)
 
+    def test_import_scoped_sync_keeps_global_observation_totals(self):
+        flow_import = FlowImport.objects.create(
+            structure=self.structure,
+            uploaded_by=self.user,
+            status=ImportStatus.COMPLETED,
+            original_filename="partial.csv",
+            stored_path="partial.csv",
+            file_sha256="f" * 64,
+            file_size_bytes=100,
+        )
+        FlowImportItem.objects.create(flow_import=flow_import, flow=self.flow_a, source_row_number=1)
+
+        result = sync_peer_observations(scope="import", import_id=flow_import.id)
+
+        self.assertEqual(result["scope"], "import")
+        self.assertEqual(result["aggregation_scope"], "all_flows")
+        self.assertEqual(result["observation_count"], 2)
+        self.assertEqual(PeerObservation.objects.count(), 2)
+
     def test_top_peers_filters_recent_period_and_orders_by_duration(self):
         IPReputation.objects.create(
             ip_address="198.51.100.25",
@@ -1625,7 +1695,7 @@ class BulletinBusinessTests(TestCase):
         self.structure = Structure.objects.create(name="Structure bulletins", code="BUL")
         self.risk = RiskCatalog.objects.create(name="Exfiltration potentielle de données")
         self.other_risk = RiskCatalog.objects.create(name="Compte compromis")
-        self.bulletin_type = BulletinTypeCatalog.objects.create(name="Tunnel SSH")
+        self.activity = ActivityCatalog.objects.create(name="Tunnel SSH")
         self.recommendation = RecommendationCatalog.objects.create(
             name="Vérifier session SSH longue",
             description="Contrôler compte, source, destination, transferts et tunnels éventuels.",
@@ -1635,7 +1705,7 @@ class BulletinBusinessTests(TestCase):
             "severity": BulletinSeverity.HIGH,
             "ips": [{"ip_address": "203.0.113.77", "role": BulletinIPRole.SOURCE}],
             "risks": [self.risk],
-            "bulletin_types": [self.bulletin_type],
+            "activities": [self.activity],
             "recommendations": [self.recommendation],
         }
 
@@ -1646,7 +1716,7 @@ class BulletinBusinessTests(TestCase):
         self.assertIsNotNone(bulletin)
         self.assertEqual(bulletin.ip_addresses.count(), 1)
         self.assertEqual(bulletin.risk_links.count(), 1)
-        self.assertEqual(bulletin.type_links.count(), 1)
+        self.assertEqual(bulletin.activity_links.count(), 1)
         self.assertEqual(bulletin.recommendation_links.count(), 1)
         self.assertEqual(len(bulletin.ip_signature), 64)
 
@@ -1702,6 +1772,7 @@ class BulletinBusinessTests(TestCase):
             total_duration_seconds=3600,
         )
         risk_profile = RiskProfile.objects.create(
+            activity=self.activity,
             name="Accès SSH prolongé depuis une IP malveillante",
             impact="Risque d'accès distant non autorisé ou de tunnel.",
             recommendation="Vérifier les journaux SSH et restreindre l'accès à la source.",

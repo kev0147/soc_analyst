@@ -53,7 +53,7 @@ class BulletinFinding(models.Model):
     )
     severity = models.CharField(max_length=16, choices=BulletinSeverity.choices, blank=True)
     peer_ip_snapshot = models.GenericIPAddressField(protocol="IPv4")
-    peer_country_snapshot = models.CharField(max_length=2, blank=True)
+    peer_country_snapshot = models.CharField(max_length=255, blank=True)
     host_ip_snapshot = models.GenericIPAddressField(protocol="IPv4", null=True, blank=True)
     host_port_snapshot = models.PositiveIntegerField(null=True, blank=True)
     host_service_snapshot = models.CharField(max_length=128, blank=True)
@@ -96,7 +96,7 @@ class BulletinFinding(models.Model):
         observation = self.peer_observation
         reputation = observation.peer_reputation
         self.peer_ip_snapshot = reputation.ip_address
-        self.peer_country_snapshot = reputation.country
+        self.peer_country_snapshot = observation.peer_country
         self.host_ip_snapshot = observation.host_ip
         self.host_port_snapshot = observation.host_port
         self.host_service_snapshot = observation.host_service

@@ -18,6 +18,7 @@ class PeerObservation(TimestampedModel):
     host_port = models.PositiveIntegerField(null=True, blank=True)
     host_service = models.CharField(max_length=128, blank=True)
     host_port_category = models.CharField(max_length=150, blank=True)
+    observed_country = models.CharField(max_length=255, blank=True)
     first_seen_at = models.DateTimeField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
     flow_count = models.PositiveBigIntegerField(default=0)
@@ -29,6 +30,20 @@ class PeerObservation(TimestampedModel):
 
     class Meta:
         ordering = ("-last_seen_at", "peer_reputation__ip_address", "host_ip", "host_port")
+        constraints = [
+            models.UniqueConstraint(
+                fields=(
+                    "peer_reputation",
+                    "network",
+                    "host_ip",
+                    "host_port",
+                    "host_service",
+                    "host_port_category",
+                ),
+                name="uniq_peer_observation_endpoint",
+                nulls_distinct=False,
+            )
+        ]
         indexes = [
             models.Index(fields=("network", "host_ip")),
             models.Index(fields=("host_port",)),
@@ -43,7 +58,7 @@ class PeerObservation(TimestampedModel):
 
     @property
     def peer_country(self):
-        return self.peer_reputation.country
+        return self.peer_reputation.country or self.observed_country
 
     def __str__(self):
         host = self.host_ip or "host inconnu"

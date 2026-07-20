@@ -224,6 +224,9 @@ export interface RiskProfile {
 export interface PeerObservation {
   id: number;
   network: number;
+  network_name: string;
+  structure_id: number;
+  structure_code: string;
   peer_reputation: number;
   peer_ip: string;
   peer_country?: string;
@@ -241,6 +244,14 @@ export interface PeerObservation {
   total_duration_seconds: number;
   max_duration_seconds: number | null;
   avg_duration_seconds: number | null;
+  reputation_results: Array<{
+    source: string;
+    status: string;
+    verdict: string;
+    score: number | null;
+    country: string;
+    analyzed_at: string | null;
+  }>;
 }
 
 export interface BulletinFinding {

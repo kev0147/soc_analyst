@@ -117,7 +117,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
               <button
                 class="btn secondary"
                 (click)="togglePeer(peer)"
-                [disabled]="peer.observation_ids.length === 0"
+                [title]="observationIds(peer).length ? '' : 'Les communications doivent être synchronisées après l’import ou l’analyse IP.'"
               >
                 {{ peerSelected(peer) ? 'Retirer les communications' : 'Sélectionner les communications' }}
               </button>
@@ -258,15 +258,25 @@ export class InvestigationPageComponent implements OnInit {
   }
 
   togglePeer(peer: TopPeer) {
+    const peerObservationIds = this.observationIds(peer);
+    if (peerObservationIds.length === 0) {
+      this.message.set(`Aucune communication sélectionnable pour ${peer.peer_ip}. Relance l’analyse IP pour synchroniser les anciens imports.`);
+      return;
+    }
     const selected = new Set(this.selectedObservationIds());
-    const allSelected = peer.observation_ids.length > 0 && peer.observation_ids.every((id) => selected.has(id));
-    for (const id of peer.observation_ids) allSelected ? selected.delete(id) : selected.add(id);
+    const allSelected = peerObservationIds.every((id) => selected.has(id));
+    for (const id of peerObservationIds) allSelected ? selected.delete(id) : selected.add(id);
     this.selectedObservationIds.set([...selected]);
   }
 
   peerSelected(peer: TopPeer): boolean {
+    const ids = this.observationIds(peer);
     const selected = new Set(this.selectedObservationIds());
-    return peer.observation_ids.length > 0 && peer.observation_ids.every((id) => selected.has(id));
+    return ids.length > 0 && ids.every((id) => selected.has(id));
+  }
+
+  observationIds(peer: TopPeer): number[] {
+    return peer.observations?.map((item) => item.id) || peer.observation_ids || [];
   }
 
   isSelected(id: number): boolean {

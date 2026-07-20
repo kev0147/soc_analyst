@@ -114,9 +114,6 @@ from analyst.controllers.bulletin_assistant.matches import BulletinAssistantMatc
 from analyst.controllers.bulletin_assistant.create_draft import BulletinAssistantCreateDraftController
 from analyst.controllers.peer_observation.list import PeerObservationListController
 from analyst.controllers.peer_observation.retrieve import PeerObservationRetrieveController
-from analyst.controllers.peer_observation.create import PeerObservationCreateController
-from analyst.controllers.peer_observation.update import PeerObservationUpdateController
-from analyst.controllers.peer_observation.delete import PeerObservationDeleteController
 from analyst.controllers.peer_observation.sync import PeerObservationSyncController
 from analyst.controllers.peer_observation.suggestions import PeerObservationSuggestionsController
 from analyst.controllers.peer_observation_risk.list import PeerObservationRiskListController
@@ -126,9 +123,6 @@ from analyst.controllers.peer_observation_risk.update import PeerObservationRisk
 from analyst.controllers.peer_observation_risk.delete import PeerObservationRiskDeleteController
 from analyst.controllers.bulletin_finding.list import BulletinFindingListController
 from analyst.controllers.bulletin_finding.retrieve import BulletinFindingRetrieveController
-from analyst.controllers.bulletin_finding.create import BulletinFindingCreateController
-from analyst.controllers.bulletin_finding.update import BulletinFindingUpdateController
-from analyst.controllers.bulletin_finding.delete import BulletinFindingDeleteController
 from analyst.controllers.detection_rule.list import DetectionRuleListController
 from analyst.controllers.detection_rule.retrieve import DetectionRuleRetrieveController
 from analyst.controllers.detection_rule.create import DetectionRuleCreateController
@@ -249,9 +243,6 @@ urlpatterns = [
     path("peer-observations/sync/", PeerObservationSyncController.as_view(), name="peer_observation-sync"),
     path("peer-observations/suggestions/", PeerObservationSuggestionsController.as_view(), name="peer_observation-suggestions"),
     path("peer-observations/<int:pk>/", PeerObservationRetrieveController.as_view(), name="peer_observation-retrieve"),
-    path("peer-observations/create/", PeerObservationCreateController.as_view(), name="peer_observation-create"),
-    path("peer-observations/<int:pk>/update/", PeerObservationUpdateController.as_view(), name="peer_observation-update"),
-    path("peer-observations/<int:pk>/delete/", PeerObservationDeleteController.as_view(), name="peer_observation-delete"),
     path("peer-observation-risks/", PeerObservationRiskListController.as_view(), name="peer_observation_risk-list"),
     path("peer-observation-risks/<int:pk>/", PeerObservationRiskRetrieveController.as_view(), name="peer_observation_risk-retrieve"),
     path("peer-observation-risks/create/", PeerObservationRiskCreateController.as_view(), name="peer_observation_risk-create"),
@@ -259,9 +250,6 @@ urlpatterns = [
     path("peer-observation-risks/<int:pk>/delete/", PeerObservationRiskDeleteController.as_view(), name="peer_observation_risk-delete"),
     path("bulletin-findings/", BulletinFindingListController.as_view(), name="bulletin_finding-list"),
     path("bulletin-findings/<int:pk>/", BulletinFindingRetrieveController.as_view(), name="bulletin_finding-retrieve"),
-    path("bulletin-findings/create/", BulletinFindingCreateController.as_view(), name="bulletin_finding-create"),
-    path("bulletin-findings/<int:pk>/update/", BulletinFindingUpdateController.as_view(), name="bulletin_finding-update"),
-    path("bulletin-findings/<int:pk>/delete/", BulletinFindingDeleteController.as_view(), name="bulletin_finding-delete"),
     path("bulletin-risk-links/", BulletinRiskListController.as_view(), name="bulletin_risk-list"),
     path("bulletin-risk-links/<int:pk>/", BulletinRiskRetrieveController.as_view(), name="bulletin_risk-retrieve"),
     path("bulletin-risk-links/create/", BulletinRiskCreateController.as_view(), name="bulletin_risk-create"),

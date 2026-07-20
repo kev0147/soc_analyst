@@ -189,11 +189,13 @@ def top_peers(params) -> dict:
         row = rows[peer_ip]
         row["peer_ip"] = peer_ip
         if reputation:
-            row["country"] = reputation.country
+            row["country"] = reputation.country or row["country"] or item.get("peer_country", "")
             row["verdict"] = reputation.verdict
             row["score"] = reputation.score
             row["source_count"] = reputation.source_count
             row["successful_source_count"] = reputation.successful_source_count
+        elif item.get("peer_country"):
+            row["country"] = item["peer_country"]
         row["flow_count"] += item["flow_count"]
         row["total_bytes"] += item["total_bytes"]
         row["total_packets"] += item["total_packets"]

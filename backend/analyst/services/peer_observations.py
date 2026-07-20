@@ -42,6 +42,7 @@ class ObservationEndpoint:
     host_port: int | None
     host_service: str
     host_port_category: str
+    peer_country: str
 
 
 def _flow_queryset(scope: str = "all_flows", import_id: int | None = None):
@@ -84,10 +85,12 @@ def _observation_endpoint(flow, cidrs) -> ObservationEndpoint | None:
 
     if src_internal:
         peer_ip = flow.dst_ip
+        peer_country = flow.dst_location
         host_ip = flow.src_ip
         host_port = flow.src_port
     else:
         peer_ip = flow.src_ip
+        peer_country = flow.src_location
         host_ip = flow.dst_ip
         host_port = flow.dst_port
 
@@ -98,6 +101,7 @@ def _observation_endpoint(flow, cidrs) -> ObservationEndpoint | None:
         host_port=host_port,
         host_service=host_service,
         host_port_category=_port_category(host_port, host_service),
+        peer_country=(peer_country or "").strip(),
     )
 
 
@@ -130,6 +134,8 @@ def _collect_stats(flows):
             endpoint.host_port_category,
         )
         row = stats[key]
+        if endpoint.peer_country and not row.get("peer_country"):
+            row["peer_country"] = endpoint.peer_country
         row["flow_count"] += 1
         row["total_bytes"] += flow.total_bytes or 0
         row["total_packets"] += flow.total_packets or 0
@@ -159,7 +165,17 @@ def collect_peer_observation_stats(flows):
 
 @transaction.atomic
 def sync_peer_observations(scope: str = "all_flows", import_id: int | None = None) -> dict:
-    stats = _collect_stats(_flow_queryset(scope=scope, import_id=import_id))
+    # PeerObservation est un agrégat global et durable. Un recalcul limité à un
+    # import écraserait les totaux issus des imports précédents pour le même
+    # couple peer/hôte/port. Le scope demandé reste retourné à titre de contexte,
+    # mais la matérialisation est toujours reconstruite depuis les flows uniques.
+    if scope not in {"all_flows", "import"}:
+        raise ValueError("scope doit valoir all_flows ou import.")
+    if scope == "import":
+        if not import_id:
+            raise ValueError("import_id est obligatoire pour scope=import.")
+        FlowImport.objects.get(pk=import_id)
+    stats = _collect_stats(_flow_queryset(scope="all_flows"))
     created = 0
     updated = 0
 
@@ -180,6 +196,7 @@ def sync_peer_observations(scope: str = "all_flows", import_id: int | None = Non
             host_service=host_service,
             host_port_category=host_port_category,
             defaults={
+                "observed_country": row.get("peer_country", ""),
                 "flow_count": row["flow_count"],
                 "total_bytes": row["total_bytes"],
                 "total_packets": row["total_packets"],
@@ -200,6 +217,7 @@ def sync_peer_observations(scope: str = "all_flows", import_id: int | None = Non
     return {
         "scope": scope,
         "import_id": import_id,
+        "aggregation_scope": "all_flows",
         "observation_count": len(stats),
         "created_count": created,
         "updated_count": updated,

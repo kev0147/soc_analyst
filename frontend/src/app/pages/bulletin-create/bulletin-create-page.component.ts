@@ -59,7 +59,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
         <h2>Observations sélectionnées</h2>
         <div class="toolbar">
           <input class="input" [(ngModel)]="observationSearch" placeholder="Filtrer peer IP, ex: 203.0.113.10" />
-          <button class="btn secondary" (click)="loadObservations()">Rechercher</button>
+          <button class="btn secondary" (click)="searchObservations()">Rechercher et ajouter</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -67,30 +67,41 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
               <tr>
                 <th></th>
                 <th>Peer</th>
+                <th>Structure/réseau</th>
                 <th>Host</th>
                 <th>Port/service</th>
+                <th>Catégorie</th>
                 <th>Verdict</th>
-                <th>Score</th>
-                <th>Durée</th>
+                <th>Flows/paquets</th>
+                <th>Durées</th>
                 <th>Volume</th>
-                <th>Dernière activité</th>
+                <th>Période</th>
               </tr>
             </thead>
             <tbody>
               @for (item of observations(); track item.id) {
                 <tr>
                   <td><input type="checkbox" [checked]="selectedObservationIds().includes(item.id)" (change)="toggleObservation(item)" /></td>
-                  <td>{{ item.peer_ip }} <span class="muted">{{ item.peer_country || '' }}</span></td>
+                  <td>
+                    <strong>{{ item.peer_ip }}</strong><br><span class="muted">{{ item.peer_country || 'Pays inconnu' }}</span>
+                    <details><summary>Réputation par plateforme</summary>
+                      @for (result of item.reputation_results; track result.source) {
+                        <small>{{ result.source }} : {{ result.verdict }} · {{ result.score ?? '-' }} · {{ result.country || '-' }}</small>
+                      } @empty { <small>Aucun résultat détaillé.</small> }
+                    </details>
+                  </td>
+                  <td>{{ item.structure_code }}<br><span class="muted">{{ item.network_name }}</span></td>
                   <td>{{ item.host_ip || '-' }}</td>
                   <td>{{ item.host_port || '-' }} / {{ item.host_service || '-' }}</td>
+                  <td>{{ item.host_port_category || '-' }}</td>
                   <td><span class="badge" [class.danger]="item.reputation_verdict === 'malicious'" [class.warning]="item.reputation_verdict === 'suspicious'" [class.success]="item.reputation_verdict === 'clean'">{{ item.reputation_verdict }}</span></td>
-                  <td>{{ item.reputation_score ?? '-' }}</td>
-                  <td>{{ duration(item.total_duration_seconds) }}</td>
+                  <td>{{ item.flow_count }} / {{ item.total_packets }}</td>
+                  <td>Total : {{ duration(item.total_duration_seconds) }}<br><span class="muted">Max : {{ duration(item.max_duration_seconds || 0) }} · Moy : {{ duration(item.avg_duration_seconds || 0) }}</span></td>
                   <td>{{ bytes(item.total_bytes) }}</td>
-                  <td>{{ item.last_seen_at ? (item.last_seen_at | date:'medium') : '-' }}</td>
+                  <td>{{ item.first_seen_at ? (item.first_seen_at | date:'short') : '-' }}<br>{{ item.last_seen_at ? (item.last_seen_at | date:'short') : '-' }}</td>
                 </tr>
               } @empty {
-                <tr><td colspan="9"><div class="empty">Aucune observation. Utilise la page Investigation ou lance une recherche.</div></td></tr>
+                <tr><td colspan="11"><div class="empty">Aucune observation chargée. Retourne dans Investigation ou recherche une peer IP.</div></td></tr>
               }
             </tbody>
           </table>
@@ -110,6 +121,9 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
       <section class="card">
         <h2>Risques compatibles</h2>
         <p class="muted">Seuls les risques correspondant aux activités choisies et aux ports hôtes sélectionnés sont affichés.</p>
+        @if (uncoveredObservations().length) {
+          <p class="badge warning">{{ uncoveredObservations().length }} communication(s) n’ont pas encore de risque compatible sélectionné.</p>
+        }
         <div class="grid cols-2">
           @for (risk of visibleRiskProfiles(); track risk.id) {
             <label class="risk-card">
@@ -148,6 +162,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
       color: var(--muted);
       line-height: 1.4;
     }
+    td details small { display: block; color: var(--muted); margin-top: 4px; white-space: nowrap; }
   `,
 })
 export class BulletinCreatePageComponent implements OnInit {
@@ -196,16 +211,31 @@ export class BulletinCreatePageComponent implements OnInit {
     this.loadObservations();
   }
 
-  loadObservations() {
+  loadObservations(selectedOnly = true) {
     this.api.peerObservationSuggestions({
-      ids: this.selectedObservationIds().length ? this.selectedObservationIds().join(',') : null,
-      peer_ip: this.observationSearch,
+      ids: selectedOnly && this.selectedObservationIds().length ? this.selectedObservationIds().join(',') : null,
+      peer_ip: selectedOnly ? null : this.observationSearch,
       structure_id: this.structureId || null,
       limit: 50,
-    }).subscribe((data) => {
-      this.observations.set(data.results);
-      this.syncStructureFromObservations();
+    }).subscribe({
+      next: (data) => {
+        const merged = selectedOnly
+          ? data.results
+          : [...this.observations(), ...data.results].filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index);
+        this.observations.set(merged);
+        this.syncStructureFromObservations();
+        this.message.set(selectedOnly ? `${data.results.length} observation(s) sélectionnée(s) chargée(s).` : `${data.results.length} résultat(s) ajouté(s).`);
+      },
+      error: (error) => this.message.set(this.errorMessage(error, 'Impossible de charger les observations.')),
     });
+  }
+
+  searchObservations() {
+    if (!this.observationSearch.trim()) {
+      this.message.set('Saisis une adresse IP peer à rechercher.');
+      return;
+    }
+    this.loadObservations(false);
   }
 
   toggleObservation(item: PeerObservation) {
@@ -222,7 +252,7 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   canCreate() {
-    return this.structureId && this.selectedObservationIds().length > 0 && this.selectedActivityIds().length > 0 && this.selectedRiskIds().length > 0;
+    return this.structureId && this.selectedObservationIds().length > 0 && this.selectedActivityIds().length > 0 && this.selectedRiskIds().length > 0 && this.uncoveredObservations().length === 0;
   }
 
   create() {
@@ -243,7 +273,7 @@ export class BulletinCreatePageComponent implements OnInit {
         if (error.status === 409) {
           this.message.set('Doublon détecté. Coche “Forcer si doublon” si tu veux créer quand même.');
         } else {
-          this.message.set('Création impossible. Vérifie structure, observations et risques.');
+          this.message.set(this.errorMessage(error, 'Création impossible. Vérifie structure, observations et risques.'));
         }
       },
     });
@@ -274,9 +304,27 @@ export class BulletinCreatePageComponent implements OnInit {
     );
   }
 
+  uncoveredObservations() {
+    const selectedRisks = this.riskProfiles().filter((risk) => this.selectedRiskIds().includes(risk.id));
+    return this.observations().filter((observation) =>
+      this.selectedObservationIds().includes(observation.id) &&
+      !selectedRisks.some((risk) => risk.port_services.length === 0 || risk.port_services.some((item) => item.port === observation.host_port))
+    );
+  }
+
   private syncStructureFromObservations() {
     const selectedId = this.selectedObservationIds()[0];
     const observation = this.observations().find((item) => item.id === selectedId);
     if (observation) this.syncStructureFromNetworkId(observation.network);
+  }
+
+  private errorMessage(error: any, fallback: string): string {
+    const collect = (value: unknown): string[] => {
+      if (typeof value === 'string') return [value];
+      if (Array.isArray(value)) return value.flatMap(collect);
+      if (value && typeof value === 'object') return Object.values(value as Record<string, unknown>).flatMap(collect);
+      return [];
+    };
+    return collect(error?.error).join(' ') || fallback;
   }
 }

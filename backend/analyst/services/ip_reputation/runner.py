@@ -222,7 +222,7 @@ def run_reputation_analysis(
 
     if progress_callback:
         progress_callback(len(candidates), len(candidates), "Synchronisation des observations")
-    observation_sync = sync_peer_observations(scope=scope, import_id=import_id)
+    observation_sync = sync_peer_observations(scope="all_flows")
 
     return {
         "scope": scope,

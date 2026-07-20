@@ -1,6 +1,7 @@
 from django.db.models import Case, IntegerField, Value, When
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 
 from analyst.models import PeerObservation
 from analyst.models.choices import ReputationVerdict
@@ -8,12 +9,19 @@ from analyst.serializers import PeerObservationSerializer
 from .filters import apply_peer_observation_filters
 
 
+class ObservationSuggestionPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = "limit"
+    max_page_size = 500
+
+
 class PeerObservationSuggestionsController(generics.ListAPIView):
     serializer_class = PeerObservationSerializer
     permission_classes = (IsAuthenticated,)
+    pagination_class = ObservationSuggestionPagination
 
     def get_queryset(self):
-        queryset = PeerObservation.objects.select_related("peer_reputation", "network", "network__structure").annotate(
+        queryset = PeerObservation.objects.select_related("peer_reputation", "network", "network__structure").prefetch_related("peer_reputation__results").annotate(
             verdict_rank=Case(
                 When(peer_reputation__verdict=ReputationVerdict.MALICIOUS, then=Value(0)),
                 When(peer_reputation__verdict=ReputationVerdict.SUSPICIOUS, then=Value(1)),
