@@ -85,6 +85,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
         <label class="field">
           <span>Classement</span>
           <select class="select" [(ngModel)]="sort">
+            <option value="verdict">Verdict de l’analyse</option>
             <option value="total_duration_seconds">Durée totale</option>
             <option value="total_bytes">Volume total</option>
             <option value="flow_count">Nombre de flows</option>
@@ -237,7 +238,7 @@ export class InvestigationPageComponent implements OnInit {
   service = '';
   minDuration: number | null = null;
   minBytes: number | null = null;
-  sort = 'total_duration_seconds';
+  sort = 'verdict';
 
   ngOnInit() {
     this.api.imports().subscribe((data) => {

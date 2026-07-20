@@ -271,8 +271,20 @@ def top_peers(params) -> dict:
         return True
 
     results = [row for row in rows.values() if keep(row)]
-    sort = params.get("sort") or "total_duration_seconds"
+    sort = params.get("sort") or "verdict"
+    verdict_rank = {
+        ReputationVerdict.MALICIOUS: 3,
+        ReputationVerdict.SUSPICIOUS: 2,
+        ReputationVerdict.UNKNOWN: 1,
+        ReputationVerdict.CLEAN: 0,
+    }
     sort_key = {
+        "verdict": lambda row: (
+            verdict_rank.get(row["verdict"], 1),
+            row["score"] if row["score"] is not None else -1,
+            row["total_duration_seconds"],
+            row["total_bytes"],
+        ),
         "total_duration_seconds": lambda row: (row["total_duration_seconds"], row["total_bytes"], row["flow_count"]),
         "total_bytes": lambda row: (row["total_bytes"], row["total_duration_seconds"], row["flow_count"]),
         "flow_count": lambda row: (row["flow_count"], row["total_duration_seconds"], row["total_bytes"]),

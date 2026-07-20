@@ -1732,6 +1732,26 @@ class IPReputationTests(TestCase):
         self.assertEqual(peer["total_duration_seconds"], 900)
         self.assertEqual(peer["host_ips"], ["10.0.0.11"])
 
+    def test_top_peers_orders_by_reputation_verdict_by_default(self):
+        IPReputation.objects.create(
+            ip_address="203.0.113.50",
+            verdict=ReputationVerdict.MALICIOUS,
+            score=90,
+        )
+        IPReputation.objects.create(
+            ip_address="198.51.100.25",
+            verdict=ReputationVerdict.CLEAN,
+            score=0,
+        )
+
+        result = top_peers({})
+
+        self.assertEqual(
+            [peer["peer_ip"] for peer in result["results"]],
+            ["203.0.113.50", "198.51.100.25"],
+        )
+        self.assertEqual(result["sort"], "verdict")
+
 
 class IPTimelineTests(TestCase):
     def setUp(self):
