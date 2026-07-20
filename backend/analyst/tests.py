@@ -1982,3 +1982,33 @@ class BulletinBusinessTests(TestCase):
         timeline = build_ip_timeline("198.51.100.99", {"structure_id": str(self.structure.id)})
         self.assertEqual(timeline["counts"]["bulletins"], 1)
         self.assertEqual(timeline["bulletins"][0]["findings"][0]["host_ip"], "10.20.30.40")
+
+    def test_default_risk_only_covers_ports_without_specialized_match(self):
+        network = Network.objects.create(structure=self.structure, name="Réseau fallback")
+        reputation = IPReputation.objects.create(ip_address="198.51.100.200")
+        ssh = PeerObservation.objects.create(
+            peer_reputation=reputation, network=network, host_ip="10.0.0.1", host_port=22
+        )
+        unknown = PeerObservation.objects.create(
+            peer_reputation=reputation, network=network, host_ip="10.0.0.2", host_port=65000
+        )
+        specialized = RiskProfile.objects.create(
+            activity=self.activity,
+            name="Risque SSH spécialisé",
+            impact="Impact SSH",
+            recommendation="Contrôler SSH",
+        )
+        RiskProfilePortService.objects.create(risk_profile=specialized, port=22, service="ssh")
+        fallback = RiskProfile.objects.get(source_key="system-default-unclassified-risk")
+
+        bulletin, _ = create_bulletin_from_findings(
+            {
+                "structure": self.structure,
+                "peer_observations": [ssh, unknown],
+                "risk_profiles": [specialized, fallback],
+            },
+            self.user,
+        )
+
+        findings = {(item.peer_observation_id, item.risk_profile_id) for item in bulletin.findings.all()}
+        self.assertEqual(findings, {(ssh.id, specialized.id), (unknown.id, fallback.id)})

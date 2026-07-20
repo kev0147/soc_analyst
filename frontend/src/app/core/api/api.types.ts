@@ -220,6 +220,7 @@ export interface RiskProfile {
   recommendation: string;
   default_severity: 'low' | 'medium' | 'high' | 'critical';
   is_active: boolean;
+  source_key?: string | null;
   port_services: Array<{ id: number; port: number; service: string }>;
 }
 

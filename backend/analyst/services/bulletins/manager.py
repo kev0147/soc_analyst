@@ -77,12 +77,20 @@ def create_bulletin_from_findings(data: dict, user, force_duplicate: bool = Fals
         profile.id: {item.port for item in profile.port_services.all()}
         for profile in risk_profiles
     }
-    compatible_pairs = [
-        (observation, risk_profile)
-        for observation in observations
-        for risk_profile in risk_profiles
-        if not profile_ports[risk_profile.id] or observation.host_port in profile_ports[risk_profile.id]
+    fallback_profiles = [
+        profile for profile in risk_profiles if profile.source_key == "system-default-unclassified-risk"
     ]
+    regular_profiles = [profile for profile in risk_profiles if profile not in fallback_profiles]
+    compatible_pairs = []
+    for observation in observations:
+        matches = [
+            profile
+            for profile in regular_profiles
+            if not profile_ports[profile.id] or observation.host_port in profile_ports[profile.id]
+        ]
+        compatible_pairs.extend(
+            (observation, profile) for profile in (matches or fallback_profiles)
+        )
     finding_pairs = {(observation.id, risk_profile.id) for observation, risk_profile in compatible_pairs}
 
     duplicates = find_duplicate_bulletin_findings(

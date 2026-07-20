@@ -1,15 +1,29 @@
-import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
-import { Network, PeerObservation, RiskProfile, Structure } from '../../core/api/api.types';
+import { Network, PeerObservation, RiskProfile, Structure, TopPeer } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
+
+interface BulletinPeerRow {
+  peer_ip: string;
+  country: string;
+  verdict: string;
+  score: number | null;
+  host_ips: string[];
+  host_ports: number[];
+  flow_count: number;
+  total_packets: number;
+  total_bytes: number;
+  total_duration_seconds: number;
+  observation_ids: number[];
+  observations: Array<{ id: number; host_port: number | null }>;
+}
 
 @Component({
   selector: 'app-bulletin-create-page',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink],
   template: `
     <div class="page">
       <div class="page-title">
@@ -56,52 +70,41 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
       </section>
 
       <section class="card">
-        <h2>Observations sélectionnées</h2>
+        <h2>Peers à inclure</h2>
         <div class="toolbar">
-          <input class="input" [(ngModel)]="observationSearch" placeholder="Filtrer peer IP, ex: 203.0.113.10" />
-          <button class="btn secondary" (click)="searchObservations()">Rechercher et ajouter</button>
+          <input class="input" [(ngModel)]="observationSearch" placeholder="Adresse IP peer exacte, ex: 203.0.113.10" (keyup.enter)="searchObservations()" />
+          <button class="btn secondary" (click)="searchObservations()">Rechercher et ajouter le peer</button>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
                 <th></th>
-                <th>Peer</th>
-                <th>Structure/réseau</th>
-                <th>Host</th>
-                <th>Port/service</th>
-                <th>Catégorie</th>
-                <th>Verdict</th>
-                <th>Flows/paquets</th>
-                <th>Durées</th>
+                <th>Peer / pays</th>
+                <th>Réputation</th>
+                <th>IP hôtes</th>
+                <th>Ports hôtes</th>
+                <th>Flows / paquets</th>
                 <th>Volume</th>
-                <th>Période</th>
+                <th>Durée</th>
               </tr>
             </thead>
             <tbody>
-              @for (item of observations(); track item.id) {
+              @for (item of peerRows(); track item.peer_ip) {
                 <tr>
-                  <td><input type="checkbox" [checked]="selectedObservationIds().includes(item.id)" (change)="toggleObservation(item)" /></td>
+                  <td><input type="checkbox" [checked]="peerSelected(item)" (change)="togglePeer(item)" /></td>
                   <td>
-                    <strong>{{ item.peer_ip }}</strong><br><span class="muted">{{ item.peer_country || 'Pays inconnu' }}</span>
-                    <details><summary>Réputation par plateforme</summary>
-                      @for (result of item.reputation_results; track result.source) {
-                        <small>{{ result.source }} : {{ result.verdict }} · {{ result.score ?? '-' }} · {{ result.country || '-' }}</small>
-                      } @empty { <small>Aucun résultat détaillé.</small> }
-                    </details>
+                    <strong>{{ item.peer_ip }}</strong><br><span class="muted">{{ item.country || 'Pays inconnu' }}</span>
                   </td>
-                  <td>{{ item.structure_code }}<br><span class="muted">{{ item.network_name }}</span></td>
-                  <td>{{ item.host_ip || '-' }}</td>
-                  <td>{{ item.host_port || '-' }} / {{ item.host_service || '-' }}</td>
-                  <td>{{ item.host_port_category || '-' }}</td>
-                  <td><span class="badge" [class.danger]="item.reputation_verdict === 'malicious'" [class.warning]="item.reputation_verdict === 'suspicious'" [class.success]="item.reputation_verdict === 'clean'">{{ item.reputation_verdict }}</span></td>
+                  <td><span class="badge" [class.danger]="item.verdict === 'malicious'" [class.warning]="item.verdict === 'suspicious'" [class.success]="item.verdict === 'clean'">{{ item.verdict }} · {{ item.score ?? '-' }}</span></td>
+                  <td>{{ item.host_ips.join(', ') || '-' }}</td>
+                  <td>{{ item.host_ports.join(', ') || '-' }}</td>
                   <td>{{ item.flow_count }} / {{ item.total_packets }}</td>
-                  <td>Total : {{ duration(item.total_duration_seconds) }}<br><span class="muted">Max : {{ duration(item.max_duration_seconds || 0) }} · Moy : {{ duration(item.avg_duration_seconds || 0) }}</span></td>
                   <td>{{ bytes(item.total_bytes) }}</td>
-                  <td>{{ item.first_seen_at ? (item.first_seen_at | date:'short') : '-' }}<br>{{ item.last_seen_at ? (item.last_seen_at | date:'short') : '-' }}</td>
+                  <td>{{ duration(item.total_duration_seconds) }}</td>
                 </tr>
               } @empty {
-                <tr><td colspan="11"><div class="empty">Aucune communication sélectionnée. Choisis une ou plusieurs communications dans <a routerLink="/investigation">Investigation</a>, ou recherche une peer IP ci-dessus.</div></td></tr>
+                <tr><td colspan="8"><div class="empty">Aucun peer ajouté. Recherche une adresse IP exacte ci-dessus ou sélectionne des peers dans <a routerLink="/investigation">Investigation</a>.</div></td></tr>
               }
             </tbody>
           </table>
@@ -111,8 +114,8 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
       <section class="card">
         <h2>Risques compatibles</h2>
         <p class="muted">Les risques sont proposés selon les ports hôtes sélectionnés. Les activités correspondantes seront ajoutées automatiquement au bulletin.</p>
-        @if (uncoveredObservations().length) {
-          <p class="badge warning">{{ uncoveredObservations().length }} communication(s) n’ont pas encore de risque compatible sélectionné.</p>
+        @if (uncoveredPeers().length) {
+          <p class="badge warning">{{ uncoveredPeers().length }} peer(s) ont encore des communications sans risque sélectionné.</p>
         }
         <div class="grid cols-2">
           @for (risk of visibleRiskProfiles(); track risk.id) {
@@ -162,6 +165,7 @@ export class BulletinCreatePageComponent implements OnInit {
   readonly networks = signal<Network[]>([]);
   readonly structures = signal<Structure[]>([]);
   readonly observations = signal<PeerObservation[]>([]);
+  readonly peerRows = signal<BulletinPeerRow[]>([]);
   readonly riskProfiles = signal<RiskProfile[]>([]);
   readonly selectedObservationIds = signal<number[]>([]);
   readonly selectedRiskIds = signal<number[]>([]);
@@ -194,8 +198,14 @@ export class BulletinCreatePageComponent implements OnInit {
       this.structures.set(data.results);
       if (data.results.length && !this.structureId) this.structureId = data.results[0].id;
     });
-    this.api.riskProfiles({ is_active: true }).subscribe((data) => this.riskProfiles.set(data.results));
-    this.loadObservations();
+    this.api.riskProfiles({ is_active: true }).subscribe((data) => {
+      this.riskProfiles.set(data.results);
+      const defaultRisk = data.results.find((risk) => risk.source_key === 'system-default-unclassified-risk');
+      if (defaultRisk && !this.selectedRiskIds().includes(defaultRisk.id)) {
+        this.selectedRiskIds.set([...this.selectedRiskIds(), defaultRisk.id]);
+      }
+    });
+    if (this.selectedObservationIds().length) this.loadObservations();
   }
 
   loadObservations(selectedOnly = true) {
@@ -210,6 +220,7 @@ export class BulletinCreatePageComponent implements OnInit {
           ? data.results
           : [...this.observations(), ...data.results].filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index);
         this.observations.set(merged);
+        this.peerRows.set(this.groupObservations(merged));
         if (!selectedOnly) {
           this.selectedObservationIds.set([...new Set([...this.selectedObservationIds(), ...data.results.map((item) => item.id)])]);
         }
@@ -229,7 +240,29 @@ export class BulletinCreatePageComponent implements OnInit {
       this.message.set('Saisis une adresse IP peer à rechercher.');
       return;
     }
-    this.loadObservations(false);
+    this.api.topPeers({
+      peer_ip: this.observationSearch.trim(),
+      structure_id: this.structureId || null,
+      sort: 'verdict',
+      limit: 1,
+    }).subscribe({
+      next: (data) => {
+        const peer = data.results[0];
+        if (!peer) {
+          this.message.set('Aucun peer trouvé pour cette adresse IP et cette structure.');
+          return;
+        }
+        if (!peer.observation_ids.length) {
+          this.message.set('Ce peer existe dans les flows, mais ses observations ne sont pas synchronisées.');
+          return;
+        }
+        const row = this.fromTopPeer(peer);
+        this.peerRows.set([...this.peerRows().filter((item) => item.peer_ip !== row.peer_ip), row]);
+        this.selectedObservationIds.set([...new Set([...this.selectedObservationIds(), ...row.observation_ids])]);
+        this.message.set(`Peer ${row.peer_ip} ajouté avec ${row.observation_ids.length} communication(s).`);
+      },
+      error: (error) => this.message.set(this.errorMessage(error, 'Recherche impossible.')),
+    });
   }
 
   toggleObservation(item: PeerObservation) {
@@ -239,6 +272,17 @@ export class BulletinCreatePageComponent implements OnInit {
     this.syncStructureFromNetworkId(item.network);
   }
 
+  peerSelected(peer: BulletinPeerRow) {
+    return peer.observation_ids.length > 0 && peer.observation_ids.every((id) => this.selectedObservationIds().includes(id));
+  }
+
+  togglePeer(peer: BulletinPeerRow) {
+    const selected = new Set(this.selectedObservationIds());
+    const allSelected = peer.observation_ids.every((id) => selected.has(id));
+    for (const id of peer.observation_ids) allSelected ? selected.delete(id) : selected.add(id);
+    this.selectedObservationIds.set([...selected]);
+  }
+
   toggleRisk(id: number) {
     const selected = new Set(this.selectedRiskIds());
     selected.has(id) ? selected.delete(id) : selected.add(id);
@@ -246,7 +290,7 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   canCreate() {
-    return this.structureId && this.selectedObservationIds().length > 0 && this.selectedRiskIds().length > 0 && this.uncoveredObservations().length === 0;
+    return this.structureId && this.selectedObservationIds().length > 0 && this.selectedRiskIds().length > 0 && this.uncoveredPeers().length === 0;
   }
 
   create() {
@@ -281,19 +325,78 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   visibleRiskProfiles() {
-    const selectedObservations = this.observations().filter((item) => this.selectedObservationIds().includes(item.id));
-    const ports = new Set(selectedObservations.map((item) => item.host_port).filter((port): port is number => port !== null));
+    const ports = new Set(
+      this.peerRows()
+        .flatMap((peer) => peer.observations)
+        .filter((item) => this.selectedObservationIds().includes(item.id))
+        .map((item) => item.host_port)
+        .filter((port): port is number => port !== null)
+    );
     return this.riskProfiles().filter((risk) =>
       risk.port_services.length === 0 || risk.port_services.some((item) => ports.has(item.port))
     );
   }
 
-  uncoveredObservations() {
+  uncoveredPeers() {
     const selectedRisks = this.riskProfiles().filter((risk) => this.selectedRiskIds().includes(risk.id));
-    return this.observations().filter((observation) =>
+    return this.peerRows().filter((peer) => peer.observations.some((observation) =>
       this.selectedObservationIds().includes(observation.id) &&
       !selectedRisks.some((risk) => risk.port_services.length === 0 || risk.port_services.some((item) => item.port === observation.host_port))
-    );
+    ));
+  }
+
+  private fromTopPeer(peer: TopPeer): BulletinPeerRow {
+    return {
+      peer_ip: peer.peer_ip,
+      country: peer.country,
+      verdict: peer.verdict,
+      score: peer.score,
+      host_ips: peer.host_ips,
+      host_ports: peer.host_ports,
+      flow_count: peer.flow_count,
+      total_packets: peer.total_packets,
+      total_bytes: peer.total_bytes,
+      total_duration_seconds: peer.total_duration_seconds,
+      observation_ids: peer.observation_ids,
+      observations: peer.observations.map((item) => ({ id: item.id, host_port: item.host_port })),
+    };
+  }
+
+  private groupObservations(observations: PeerObservation[]): BulletinPeerRow[] {
+    const grouped = new Map<string, BulletinPeerRow>();
+    for (const item of observations) {
+      let row = grouped.get(item.peer_ip);
+      if (!row) {
+        row = {
+          peer_ip: item.peer_ip,
+          country: item.peer_country || '',
+          verdict: item.reputation_verdict,
+          score: item.reputation_score ?? null,
+          host_ips: [],
+          host_ports: [],
+          flow_count: 0,
+          total_packets: 0,
+          total_bytes: 0,
+          total_duration_seconds: 0,
+          observation_ids: [],
+          observations: [],
+        };
+        grouped.set(item.peer_ip, row);
+      }
+      if (item.host_ip && !row.host_ips.includes(item.host_ip)) row.host_ips.push(item.host_ip);
+      if (item.host_port !== null && !row.host_ports.includes(item.host_port)) row.host_ports.push(item.host_port);
+      row.flow_count += item.flow_count;
+      row.total_packets += item.total_packets;
+      row.total_bytes += item.total_bytes;
+      row.total_duration_seconds += item.total_duration_seconds;
+      row.observation_ids.push(item.id);
+      row.observations.push({ id: item.id, host_port: item.host_port });
+    }
+    return [...grouped.values()].map((row) => ({
+      ...row,
+      host_ips: row.host_ips.sort(),
+      host_ports: row.host_ports.sort((a, b) => a - b),
+    }));
   }
 
   private syncStructureFromObservations() {
