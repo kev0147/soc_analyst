@@ -26,6 +26,7 @@ import {
 } from './api.types';
 
 export type QueryParams = Record<string, string | number | boolean | null | undefined>;
+export type CatalogKind = 'activities' | 'risks' | 'recommendations';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -125,6 +126,22 @@ export class ApiService {
     return this.http.get<PaginatedResponse<CatalogItem>>(`${this.baseUrl}/recommendations/`);
   }
 
+  catalogItems(kind: CatalogKind, params: QueryParams = {}): Observable<PaginatedResponse<CatalogItem>> {
+    return this.http.get<PaginatedResponse<CatalogItem>>(`${this.baseUrl}/${kind}/`, { params: this.params(params) });
+  }
+
+  createCatalogItem(kind: CatalogKind, payload: Partial<CatalogItem>): Observable<CatalogItem> {
+    return this.http.post<CatalogItem>(`${this.baseUrl}/${kind}/create/`, payload);
+  }
+
+  updateCatalogItem(kind: CatalogKind, id: number, payload: Partial<CatalogItem>): Observable<CatalogItem> {
+    return this.http.put<CatalogItem>(`${this.baseUrl}/${kind}/${id}/update/`, payload);
+  }
+
+  deactivateCatalogItem(kind: CatalogKind, id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${kind}/${id}/delete/`);
+  }
+
   riskProfiles(params: QueryParams = {}): Observable<PaginatedResponse<RiskProfile>> {
     return this.http.get<PaginatedResponse<RiskProfile>>(`${this.baseUrl}/risk-profiles/`, { params: this.params(params) });
   }
@@ -170,6 +187,10 @@ export class ApiService {
 
   retryBackgroundJob(id: string): Observable<BackgroundJob> {
     return this.http.post<BackgroundJob>(`${this.baseUrl}/background-jobs/${id}/retry/`, {});
+  }
+
+  cancelBackgroundJob(id: string): Observable<BackgroundJob> {
+    return this.http.post<BackgroundJob>(`${this.baseUrl}/background-jobs/${id}/cancel/`, {});
   }
 
   workerStatus(): Observable<WorkerStatus> {

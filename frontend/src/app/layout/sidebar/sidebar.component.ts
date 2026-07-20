@@ -16,6 +16,7 @@ import { AuthService } from '../../core/auth/auth.service';
         }
         @if (auth.user()?.role === 'admin') {
           <a routerLink="/structures" routerLinkActive="active">Structures</a>
+          <a routerLink="/catalogs" routerLinkActive="active">Référentiels SOC</a>
         }
       </nav>
     </aside>

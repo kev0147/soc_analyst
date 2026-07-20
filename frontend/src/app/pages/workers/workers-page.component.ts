@@ -70,6 +70,7 @@ import { BackgroundJob, WorkerLogs, WorkerStatus } from '../../core/api/api.type
               <option value="running">En cours</option>
               <option value="completed">Terminés</option>
               <option value="failed">Échoués</option>
+              <option value="canceled">Annulés</option>
             </select>
           </label>
         </div>
@@ -80,12 +81,15 @@ import { BackgroundJob, WorkerLogs, WorkerStatus } from '../../core/api/api.type
               @for (job of jobs(); track job.id) {
                 <tr>
                   <td>{{ job.kind }}</td>
-                  <td><span class="badge" [class.success]="job.status === 'completed'" [class.warning]="job.status === 'queued' || job.status === 'running'" [class.danger]="job.status === 'failed'">{{ job.status }}</span></td>
+                  <td><span class="badge" [class.success]="job.status === 'completed'" [class.warning]="job.status === 'queued' || job.status === 'running'" [class.danger]="job.status === 'failed'">{{ job.cancel_requested_at && job.status === 'running' ? 'arrêt demandé' : job.status }}</span></td>
                   <td>{{ job.progress_percent === null ? job.progress_current : job.progress_percent + '%' }}</td>
                   <td>{{ job.error_message || job.status_message || '-' }}</td>
                   <td>{{ job.created_at | date:'medium' }}</td>
                   <td>{{ job.completed_at ? (job.completed_at | date:'medium') : '-' }}</td>
-                  <td>@if (job.can_retry) { <button class="btn secondary" (click)="retry(job)">Relancer</button> }</td>
+                  <td class="toolbar">
+                    @if (job.can_cancel) { <button class="btn secondary" (click)="cancel(job)">Arrêter</button> }
+                    @if (job.can_retry) { <button class="btn secondary" (click)="retry(job)">Relancer</button> }
+                  </td>
                 </tr>
               } @empty {
                 <tr><td colspan="7"><div class="empty">Aucun job.</div></td></tr>
@@ -150,6 +154,16 @@ export class WorkersPageComponent implements OnInit, OnDestroy {
         this.loadJobs();
       },
       error: () => this.message.set('Relance impossible.'),
+    });
+  }
+
+  cancel(job: BackgroundJob) {
+    this.api.cancelBackgroundJob(job.id).subscribe({
+      next: () => {
+        this.message.set(job.status === 'queued' ? 'Job annulé.' : 'Arrêt demandé au job en cours.');
+        this.loadJobs();
+      },
+      error: (error) => this.message.set(error?.error?.detail || 'Arrêt impossible.'),
     });
   }
 

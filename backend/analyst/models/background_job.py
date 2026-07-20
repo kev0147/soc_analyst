@@ -44,6 +44,7 @@ class BackgroundJob(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    cancel_requested_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -64,7 +65,11 @@ class BackgroundJob(models.Model):
 
     @property
     def can_retry(self):
-        return self.status == BackgroundJobStatus.FAILED
+        return self.status in (BackgroundJobStatus.FAILED, BackgroundJobStatus.CANCELED)
+
+    @property
+    def can_cancel(self):
+        return self.status in (BackgroundJobStatus.QUEUED, BackgroundJobStatus.RUNNING) and not self.cancel_requested_at
 
     def __str__(self):
         return f"{self.get_kind_display()} — {self.get_status_display()}"

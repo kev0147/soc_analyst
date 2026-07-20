@@ -3,7 +3,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
-import { CatalogItem, Network, PeerObservation, RiskProfile, Structure } from '../../core/api/api.types';
+import { Network, PeerObservation, RiskProfile, Structure } from '../../core/api/api.types';
 import { formatBytes, formatDuration } from '../../shared/formatters';
 
 @Component({
@@ -101,7 +101,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                   <td>{{ item.first_seen_at ? (item.first_seen_at | date:'short') : '-' }}<br>{{ item.last_seen_at ? (item.last_seen_at | date:'short') : '-' }}</td>
                 </tr>
               } @empty {
-                <tr><td colspan="11"><div class="empty">Aucune observation chargée. Retourne dans Investigation ou recherche une peer IP.</div></td></tr>
+                <tr><td colspan="11"><div class="empty">Aucune communication sélectionnée. Choisis une ou plusieurs communications dans <a routerLink="/investigation">Investigation</a>, ou recherche une peer IP ci-dessus.</div></td></tr>
               }
             </tbody>
           </table>
@@ -109,18 +109,8 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
       </section>
 
       <section class="card">
-        <h2>Activités concernées</h2>
-        <p class="muted">Un bulletin peut contenir plusieurs activités. Elles déterminent les risques proposés.</p>
-        <div class="toolbar">
-          @for (activity of activities(); track activity.id) {
-            <label><input type="checkbox" [checked]="selectedActivityIds().includes(activity.id)" (change)="toggleActivity(activity.id)" /> {{ activity.name }}</label>
-          }
-        </div>
-      </section>
-
-      <section class="card">
         <h2>Risques compatibles</h2>
-        <p class="muted">Seuls les risques correspondant aux activités choisies et aux ports hôtes sélectionnés sont affichés.</p>
+        <p class="muted">Les risques sont proposés selon les ports hôtes sélectionnés. Les activités correspondantes seront ajoutées automatiquement au bulletin.</p>
         @if (uncoveredObservations().length) {
           <p class="badge warning">{{ uncoveredObservations().length }} communication(s) n’ont pas encore de risque compatible sélectionné.</p>
         }
@@ -172,9 +162,7 @@ export class BulletinCreatePageComponent implements OnInit {
   readonly networks = signal<Network[]>([]);
   readonly structures = signal<Structure[]>([]);
   readonly observations = signal<PeerObservation[]>([]);
-  readonly activities = signal<CatalogItem[]>([]);
   readonly riskProfiles = signal<RiskProfile[]>([]);
-  readonly selectedActivityIds = signal<number[]>([]);
   readonly selectedObservationIds = signal<number[]>([]);
   readonly selectedRiskIds = signal<number[]>([]);
   readonly message = signal('');
@@ -207,7 +195,6 @@ export class BulletinCreatePageComponent implements OnInit {
       if (data.results.length && !this.structureId) this.structureId = data.results[0].id;
     });
     this.api.riskProfiles({ is_active: true }).subscribe((data) => this.riskProfiles.set(data.results));
-    this.api.activities({ is_active: true }).subscribe((data) => this.activities.set(data.results));
     this.loadObservations();
   }
 
@@ -215,7 +202,7 @@ export class BulletinCreatePageComponent implements OnInit {
     this.api.peerObservationSuggestions({
       ids: selectedOnly && this.selectedObservationIds().length ? this.selectedObservationIds().join(',') : null,
       peer_ip: selectedOnly ? null : this.observationSearch,
-      structure_id: this.structureId || null,
+      structure_id: selectedOnly && this.selectedObservationIds().length ? null : (this.structureId || null),
       limit: 50,
     }).subscribe({
       next: (data) => {
@@ -223,8 +210,15 @@ export class BulletinCreatePageComponent implements OnInit {
           ? data.results
           : [...this.observations(), ...data.results].filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index);
         this.observations.set(merged);
+        if (!selectedOnly) {
+          this.selectedObservationIds.set([...new Set([...this.selectedObservationIds(), ...data.results.map((item) => item.id)])]);
+        }
         this.syncStructureFromObservations();
-        this.message.set(selectedOnly ? `${data.results.length} observation(s) sélectionnée(s) chargée(s).` : `${data.results.length} résultat(s) ajouté(s).`);
+        if (selectedOnly && this.selectedObservationIds().length && data.results.length === 0) {
+          this.message.set('Les observations sélectionnées ne sont plus disponibles. Resynchronise les observations depuis Analyse IP, puis retourne dans Investigation.');
+        } else {
+          this.message.set(selectedOnly ? `${data.results.length} observation(s) sélectionnée(s) chargée(s).` : `${data.results.length} résultat(s) ajouté(s) et sélectionné(s).`);
+        }
       },
       error: (error) => this.message.set(this.errorMessage(error, 'Impossible de charger les observations.')),
     });
@@ -252,7 +246,7 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   canCreate() {
-    return this.structureId && this.selectedObservationIds().length > 0 && this.selectedActivityIds().length > 0 && this.selectedRiskIds().length > 0 && this.uncoveredObservations().length === 0;
+    return this.structureId && this.selectedObservationIds().length > 0 && this.selectedRiskIds().length > 0 && this.uncoveredObservations().length === 0;
   }
 
   create() {
@@ -286,21 +280,11 @@ export class BulletinCreatePageComponent implements OnInit {
     }
   }
 
-  toggleActivity(id: number) {
-    const selected = new Set(this.selectedActivityIds());
-    selected.has(id) ? selected.delete(id) : selected.add(id);
-    this.selectedActivityIds.set([...selected]);
-    const visible = new Set(this.visibleRiskProfiles().map((risk) => risk.id));
-    this.selectedRiskIds.set(this.selectedRiskIds().filter((riskId) => visible.has(riskId)));
-  }
-
   visibleRiskProfiles() {
-    const activities = new Set(this.selectedActivityIds());
     const selectedObservations = this.observations().filter((item) => this.selectedObservationIds().includes(item.id));
     const ports = new Set(selectedObservations.map((item) => item.host_port).filter((port): port is number => port !== null));
     return this.riskProfiles().filter((risk) =>
-      activities.has(risk.activity) &&
-      (risk.port_services.length === 0 || risk.port_services.some((item) => ports.has(item.port)))
+      risk.port_services.length === 0 || risk.port_services.some((item) => ports.has(item.port))
     );
   }
 

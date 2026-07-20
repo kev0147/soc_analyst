@@ -6,6 +6,7 @@ from analyst.controllers.user.me import CurrentUserController
 from analyst.controllers.background_job.list import BackgroundJobListController
 from analyst.controllers.background_job.retrieve import BackgroundJobRetrieveController
 from analyst.controllers.background_job.retry import BackgroundJobRetryController
+from analyst.controllers.background_job.cancel import BackgroundJobCancelController
 from analyst.controllers.worker.status import WorkerStatusController
 from analyst.controllers.worker.start import WorkerStartController
 from analyst.controllers.worker.logs import WorkerLogsController
@@ -140,6 +141,7 @@ urlpatterns = [
     path("background-jobs/", BackgroundJobListController.as_view(), name="background_job-list"),
     path("background-jobs/<uuid:pk>/", BackgroundJobRetrieveController.as_view(), name="background_job-retrieve"),
     path("background-jobs/<uuid:pk>/retry/", BackgroundJobRetryController.as_view(), name="background_job-retry"),
+    path("background-jobs/<uuid:pk>/cancel/", BackgroundJobCancelController.as_view(), name="background_job-cancel"),
     path("workers/status/", WorkerStatusController.as_view(), name="worker-status"),
     path("workers/start/", WorkerStartController.as_view(), name="worker-start"),
     path("workers/logs/", WorkerLogsController.as_view(), name="worker-logs"),

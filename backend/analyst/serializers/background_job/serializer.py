@@ -6,6 +6,7 @@ from analyst.models import BackgroundJob
 class BackgroundJobSerializer(serializers.ModelSerializer):
     progress_percent = serializers.FloatField(read_only=True)
     can_retry = serializers.BooleanField(read_only=True)
+    can_cancel = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = BackgroundJob

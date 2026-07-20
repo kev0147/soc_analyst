@@ -12,6 +12,7 @@ import { InvestigationPageComponent } from './pages/investigation/investigation-
 import { StructuresPageComponent } from './pages/structures/structures-page.component';
 import { WorkersPageComponent } from './pages/workers/workers-page.component';
 import { DetectionsPageComponent } from './pages/detections/detections-page.component';
+import { CatalogsPageComponent } from './pages/catalogs/catalogs-page.component';
 
 export const routes: Routes = [
   { path: 'login', component: LoginPageComponent },
@@ -32,6 +33,7 @@ export const routes: Routes = [
       { path: 'bulletins', component: BulletinsPageComponent },
       { path: 'bulletins/new', component: BulletinCreatePageComponent },
       { path: 'structures', component: StructuresPageComponent },
+      { path: 'catalogs', component: CatalogsPageComponent },
       { path: 'workers', component: WorkersPageComponent },
     ],
   },

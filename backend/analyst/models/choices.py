@@ -84,6 +84,7 @@ class BackgroundJobStatus(models.TextChoices):
     RUNNING = "running", "En cours"
     COMPLETED = "completed", "Terminé"
     FAILED = "failed", "Échoué"
+    CANCELED = "canceled", "Annulé"
 
 
 class DetectionRuleType(models.TextChoices):

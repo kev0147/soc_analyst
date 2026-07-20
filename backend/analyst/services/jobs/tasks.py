@@ -15,6 +15,15 @@ from analyst.services.daily_aggregates import build_daily_flow_aggregates
 from analyst.services.detections import run_detections
 
 
+class BackgroundJobCancelled(Exception):
+    pass
+
+
+def _raise_if_cancelled(job_id: str):
+    if BackgroundJob.objects.filter(pk=job_id, cancel_requested_at__isnull=False).exists():
+        raise BackgroundJobCancelled("Traitement annulé par l'utilisateur.")
+
+
 def _audit(job: BackgroundJob, action: str, details: dict | None = None):
     AuditEvent.objects.create(
         actor=job.created_by,
@@ -84,6 +93,7 @@ def _with_lock_retries(operation, *, job_id: str | None = None):
 
 
 def _progress(job_id: str, current: int, total: int | None = None, message: str = ""):
+    _raise_if_cancelled(job_id)
     updates = {"progress_current": max(int(current or 0), 0)}
     if total is not None:
         updates["progress_total"] = max(int(total or 0), 0)
@@ -196,12 +206,35 @@ def _complete(job: BackgroundJob, result: dict):
     job.refresh_from_db()
 
 
+def _cancel(job: BackgroundJob):
+    completed_at = timezone.now()
+    with transaction.atomic():
+        BackgroundJob.objects.filter(pk=job.pk).update(
+            status=BackgroundJobStatus.CANCELED,
+            error_message="",
+            status_message="Annulé",
+            completed_at=completed_at,
+        )
+        if job.kind == BackgroundJobKind.FLOW_IMPORT and job.flow_import_id:
+            FlowImport.objects.filter(pk=job.flow_import_id).update(
+                status=ImportStatus.FAILED,
+                error_message="Import annulé par l'utilisateur.",
+                completed_at=completed_at,
+            )
+        _audit(job, "BACKGROUND_JOB_CANCELED")
+    job.refresh_from_db()
+
+
 def execute_background_job(job_id: str) -> dict | None:
     job = _with_lock_retries(lambda: _claim(job_id), job_id=job_id)
     if job is None:
         return None
     try:
         result = _with_lock_retries(lambda: _run_recoverable(job), job_id=job_id)
+        _raise_if_cancelled(job_id)
+    except BackgroundJobCancelled:
+        _with_lock_retries(lambda: _cancel(job), job_id=job_id)
+        return {"canceled": True}
     except Exception as exc:
         _with_lock_retries(lambda: _fail(job, exc), job_id=job_id)
         raise

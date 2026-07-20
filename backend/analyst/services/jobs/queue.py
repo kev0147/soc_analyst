@@ -38,8 +38,8 @@ def enqueue_background_job(
 
 
 def retry_background_job(job: BackgroundJob, user) -> BackgroundJob:
-    if job.status != BackgroundJobStatus.FAILED:
-        raise ValueError("Seul un job échoué peut être relancé.")
+    if job.status not in (BackgroundJobStatus.FAILED, BackgroundJobStatus.CANCELED):
+        raise ValueError("Seul un job échoué ou annulé peut être relancé.")
 
     if job.kind == BackgroundJobKind.FLOW_IMPORT and job.flow_import_id:
         flow_import = job.flow_import

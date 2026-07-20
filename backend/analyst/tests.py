@@ -681,6 +681,37 @@ class BackgroundJobApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_user_can_cancel_own_queued_job(self):
+        job = BackgroundJob.objects.create(
+            kind=BackgroundJobKind.IP_REPUTATION,
+            created_by=self.user,
+            payload={"scope": "all_flows"},
+        )
+
+        response = self.client.post(f"/api/v1/background-jobs/{job.id}/cancel/", {})
+
+        self.assertEqual(response.status_code, 202)
+        job.refresh_from_db()
+        self.assertEqual(job.status, BackgroundJobStatus.CANCELED)
+        self.assertIsNotNone(job.cancel_requested_at)
+        self.assertTrue(job.can_retry)
+
+    def test_cancel_running_job_records_cooperative_stop_request(self):
+        job = BackgroundJob.objects.create(
+            kind=BackgroundJobKind.IP_REPUTATION,
+            created_by=self.user,
+            status=BackgroundJobStatus.RUNNING,
+            payload={"scope": "all_flows"},
+        )
+
+        response = self.client.post(f"/api/v1/background-jobs/{job.id}/cancel/", {})
+
+        self.assertEqual(response.status_code, 202)
+        job.refresh_from_db()
+        self.assertEqual(job.status, BackgroundJobStatus.RUNNING)
+        self.assertEqual(job.status_message, "Arrêt demandé")
+        self.assertIsNotNone(job.cancel_requested_at)
+
 
 class StructureAdministrationApiTests(TestCase):
     def setUp(self):

@@ -32,13 +32,15 @@ export interface FlowImport {
 export interface BackgroundJob {
   id: string;
   kind: 'flow_import' | 'ip_reputation' | 'detection' | 'daily_aggregation';
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'canceled';
   status_message: string;
   progress_current: number;
   progress_total: number;
   progress_percent: number | null;
   error_message: string;
   can_retry: boolean;
+  can_cancel: boolean;
+  cancel_requested_at: string | null;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;

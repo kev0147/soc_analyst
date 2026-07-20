@@ -120,7 +120,7 @@ def _observation_endpoint(flow, cidrs) -> ObservationEndpoint | None:
     )
 
 
-def _collect_stats(flows):
+def _collect_stats(flows, progress_callback=None):
     stats = defaultdict(
         lambda: {
             "flow_count": 0,
@@ -133,11 +133,16 @@ def _collect_stats(flows):
         }
     )
     cidr_cache = {}
-    for flow in flows.iterator(chunk_size=1000):
+    flow_total = flows.count() if progress_callback else None
+    if progress_callback:
+        progress_callback(0, flow_total, f"Agrégation de {flow_total} flows")
+    for index, flow in enumerate(flows.iterator(chunk_size=1000), start=1):
         structure_id = flow.network.structure_id
         if structure_id not in cidr_cache:
             cidr_cache[structure_id] = internal_cidrs_for_structure(flow.network.structure)
         endpoint = _observation_endpoint(flow, cidr_cache[structure_id])
+        if progress_callback and index % 10_000 == 0:
+            progress_callback(index, flow_total, "Agrégation des communications")
         if endpoint is None:
             continue
         key = (
@@ -193,7 +198,6 @@ def _reputations_by_ip(peer_ips: set[str]) -> dict[str, IPReputation]:
             ignore_conflicts=True,
             batch_size=500,
         )
-
     reputations = {}
     for peer_ip_chunk in _chunks(sorted(peer_ips)):
         reputations.update(
@@ -218,7 +222,7 @@ def sync_peer_observations(
         if not import_id:
             raise ValueError("import_id est obligatoire pour scope=import.")
         FlowImport.objects.get(pk=import_id)
-    stats = _collect_stats(_flow_queryset(scope="all_flows"))
+    stats = _collect_stats(_flow_queryset(scope="all_flows"), progress_callback=progress_callback)
     total = len(stats)
     if progress_callback:
         progress_callback(0, total, f"Préparation de {total} observations")
