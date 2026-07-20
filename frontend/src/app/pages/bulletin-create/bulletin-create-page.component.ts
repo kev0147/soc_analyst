@@ -188,6 +188,7 @@ export class BulletinCreatePageComponent implements OnInit {
     }
     const peer = queryParams.get('peer');
     if (peer) this.observationSearch = peer;
+    const peers = (queryParams.get('peers') || '').split(',').map((value) => value.trim()).filter(Boolean);
     const structureId = Number(queryParams.get('structure'));
     if (structureId) this.structureId = structureId;
     this.api.networks().subscribe((data) => {
@@ -206,6 +207,7 @@ export class BulletinCreatePageComponent implements OnInit {
       }
     });
     if (this.selectedObservationIds().length) this.loadObservations();
+    for (const peerIp of peers) this.addPeerByIp(peerIp, false);
   }
 
   loadObservations(selectedOnly = true) {
@@ -240,8 +242,12 @@ export class BulletinCreatePageComponent implements OnInit {
       this.message.set('Saisis une adresse IP peer à rechercher.');
       return;
     }
+    this.addPeerByIp(this.observationSearch.trim(), true);
+  }
+
+  private addPeerByIp(peerIp: string, announce: boolean) {
     this.api.topPeers({
-      peer_ip: this.observationSearch.trim(),
+      peer_ip: peerIp,
       structure_id: this.structureId || null,
       sort: 'verdict',
       limit: 1,
@@ -259,7 +265,7 @@ export class BulletinCreatePageComponent implements OnInit {
         const row = this.fromTopPeer(peer);
         this.peerRows.set([...this.peerRows().filter((item) => item.peer_ip !== row.peer_ip), row]);
         this.selectedObservationIds.set([...new Set([...this.selectedObservationIds(), ...row.observation_ids])]);
-        this.message.set(`Peer ${row.peer_ip} ajouté avec ${row.observation_ids.length} communication(s).`);
+        if (announce) this.message.set(`Peer ${row.peer_ip} ajouté avec ${row.observation_ids.length} communication(s).`);
       },
       error: (error) => this.message.set(this.errorMessage(error, 'Recherche impossible.')),
     });

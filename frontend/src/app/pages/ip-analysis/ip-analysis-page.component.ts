@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
 import { IpAnalysisRecord, IpReputationSourceState, Structure } from '../../core/api/api.types';
@@ -144,6 +144,7 @@ import { IpAnalysisRecord, IpReputationSourceState, Structure } from '../../core
 })
 export class IpAnalysisPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly zone = inject(NgZone);
   readonly message = signal('');
   readonly records = signal<IpAnalysisRecord[]>([]);
   readonly structures = signal<Structure[]>([]);
@@ -186,8 +187,9 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
 
   private poll(jobId: string) {
     if (this.pollTimer) clearTimeout(this.pollTimer);
-    this.pollTimer = setTimeout(() => {
-      this.api.backgroundJob(jobId).subscribe({
+    this.zone.runOutsideAngular(() => {
+      this.pollTimer = setTimeout(() => this.zone.run(() => {
+        this.api.backgroundJob(jobId).subscribe({
         next: (job) => {
           const progress = job.progress_percent === null ? job.progress_current : `${job.progress_percent}%`;
           this.message.set(job.status === 'failed' ? `Échec : ${job.error_message}` : `${job.status_message || job.status}${progress ? ` — ${progress}` : ''}`);
@@ -195,8 +197,9 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
           if (job.status === 'queued' || job.status === 'running') this.poll(job.id);
         },
         error: () => this.message.set('Impossible de suivre le job.'),
-      });
-    }, 3000);
+        });
+      }), 3000);
+    });
   }
 
   ngOnDestroy() {

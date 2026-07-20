@@ -319,9 +319,13 @@ export class InvestigationPageComponent implements OnInit {
   }
 
   createBulletin() {
+    const selected = new Set(this.selectedObservationIds());
+    const peerIps = this.peers()
+      .filter((peer) => this.observationIds(peer).some((id) => selected.has(id)))
+      .map((peer) => peer.peer_ip);
     this.router.navigate(['/bulletins/new'], {
       queryParams: {
-        observations: this.selectedObservationIds().join(','),
+        peers: peerIps.join(','),
         structure: this.structureId,
       },
     });

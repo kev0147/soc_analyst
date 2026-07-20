@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
@@ -92,6 +92,7 @@ import { formatBytes } from '../../shared/formatters';
 })
 export class ImportsPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly zone = inject(NgZone);
   readonly imports = signal<FlowImport[]>([]);
   readonly structures = signal<Structure[]>([]);
   readonly file = signal<File | null>(null);
@@ -176,15 +177,17 @@ export class ImportsPageComponent implements OnInit, OnDestroy {
 
   private poll(jobId: string) {
     if (this.pollTimer) clearTimeout(this.pollTimer);
-    this.pollTimer = setTimeout(() => {
-      this.api.backgroundJob(jobId).subscribe({
+    this.zone.runOutsideAngular(() => {
+      this.pollTimer = setTimeout(() => this.zone.run(() => {
+        this.api.backgroundJob(jobId).subscribe({
         next: (job) => {
           this.message.set(job.status === 'failed' ? `Échec : ${job.error_message}` : job.status_message || job.status);
           this.load();
           if (job.status === 'queued' || job.status === 'running') this.poll(job.id);
         },
-      });
-    }, 3000);
+        });
+      }), 3000);
+    });
   }
 
   ngOnDestroy() {

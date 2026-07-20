@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
@@ -107,6 +107,7 @@ import { BackgroundJob, WorkerLogs, WorkerStatus } from '../../core/api/api.type
 export class WorkersPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly zone = inject(NgZone);
   readonly worker = signal<WorkerStatus | null>(null);
   readonly jobs = signal<BackgroundJob[]>([]);
   readonly logs = signal<WorkerLogs | null>(null);
@@ -128,7 +129,9 @@ export class WorkersPageComponent implements OnInit, OnDestroy {
     });
     this.loadJobs();
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.load(), 3000);
+    this.zone.runOutsideAngular(() => {
+      this.timer = setTimeout(() => this.zone.run(() => this.load()), 3000);
+    });
   }
 
   loadJobs() {
