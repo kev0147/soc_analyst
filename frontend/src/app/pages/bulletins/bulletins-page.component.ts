@@ -39,8 +39,8 @@ import { Bulletin } from '../../core/api/api.types';
                   <td><span class="badge" [class.danger]="bulletin.severity === 'critical' || bulletin.severity === 'high'" [class.warning]="bulletin.severity === 'medium'">{{ bulletin.severity }}</span></td>
                   <td><span class="badge info">{{ bulletin.status }}</span></td>
                   <td>
-                    @for (ip of bulletin.ips || []; track ip.ip_address) {
-                      <span class="badge">{{ ip.role }}: {{ ip.ip_address }}</span>
+                    @for (ip of bulletin.ips || []; track ip.id) {
+                      <span class="badge">{{ ip.role }}: {{ ip.ip_address }}{{ ip.port !== null ? ':' + ip.port : '' }}</span>
                     }
                     @for (finding of bulletin.findings || []; track finding.id) {
                       <span class="badge">{{ finding.peer_ip }} → {{ finding.host_ip || '-' }}:{{ finding.host_port || '-' }}</span>

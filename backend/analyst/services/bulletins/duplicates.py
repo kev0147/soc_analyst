@@ -1,5 +1,7 @@
 import hashlib
 
+from django.db.models import Q
+
 from analyst.models import Bulletin
 
 
@@ -70,6 +72,37 @@ def finding_duplicate_summary(bulletin: Bulletin) -> dict:
             for finding in bulletin.findings.all()
         ],
     }
+
+
+def find_bulletins_containing_peer_ips(structure_id: int, peer_ips: set[str]) -> list[dict]:
+    if not peer_ips:
+        return []
+    candidates = (
+        Bulletin.objects.filter(structure_id=structure_id, deleted_at__isnull=True)
+        .filter(
+            Q(ip_addresses__ip_address__in=peer_ips)
+            | Q(findings__peer_ip_snapshot__in=peer_ips)
+        )
+        .distinct()
+        .prefetch_related("ip_addresses", "findings")
+    )
+    results = []
+    for bulletin in candidates:
+        bulletin_ips = {item.ip_address for item in bulletin.ip_addresses.all()}
+        bulletin_ips.update(
+            item.peer_ip_snapshot for item in bulletin.findings.all() if item.peer_ip_snapshot
+        )
+        results.append({
+            "id": bulletin.id,
+            "reference": bulletin.reference,
+            "external_reference": bulletin.external_reference,
+            "severity": bulletin.severity,
+            "status": bulletin.status,
+            "sent_at": bulletin.sent_at.isoformat() if bulletin.sent_at else None,
+            "matched_peer_ips": sorted(peer_ips & bulletin_ips),
+            "match_reason": "peer_ip_already_documented",
+        })
+    return results
 
 
 def find_duplicate_bulletin_findings(

@@ -18,7 +18,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
           <p>Une ligne par IP externe, avec toutes les communications hôte/port associées.</p>
         </div>
         <button class="btn" (click)="createBulletin()" [disabled]="selectedObservationIds().length === 0">
-          Créer un bulletin ({{ selectedObservationIds().length }})
+          Créer un bulletin ({{ selectedPeerCount() }} peer(s))
         </button>
       </div>
 
@@ -329,6 +329,11 @@ export class InvestigationPageComponent implements OnInit {
         structure: this.structureId,
       },
     });
+  }
+
+  selectedPeerCount(): number {
+    const selected = new Set(this.selectedObservationIds());
+    return this.peers().filter((peer) => this.observationIds(peer).some((id) => selected.has(id))).length;
   }
 
   private normalizedDate(value: string): string {

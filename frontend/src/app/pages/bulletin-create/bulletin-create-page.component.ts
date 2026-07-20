@@ -33,8 +33,8 @@ interface BulletinPeerRow {
         <a class="btn secondary" routerLink="/investigation">Choisir des peers</a>
       </div>
 
-      <section class="card">
-        <h2>Informations bulletin</h2>
+      <details class="card">
+        <summary>Options avancées (facultatif)</summary>
         <div class="grid cols-3">
           <label class="field">
             <span>Structure</span>
@@ -66,7 +66,7 @@ interface BulletinPeerRow {
             </select>
           </label>
         </div>
-      </section>
+      </details>
 
       <section class="card">
         <h2>Peers à inclure</h2>
@@ -111,31 +111,13 @@ interface BulletinPeerRow {
       </section>
 
       <section class="card">
-        <h2>Risques compatibles</h2>
-        <p class="muted">Les risques sont proposés selon les ports hôtes sélectionnés. Les activités correspondantes seront ajoutées automatiquement au bulletin.</p>
-        @if (uncoveredPeers().length) {
-          <p class="badge warning">{{ uncoveredPeers().length }} peer(s) ont encore des communications sans risque sélectionné.</p>
-        }
-        <div class="grid cols-2">
-          @for (risk of visibleRiskProfiles(); track risk.id) {
-            <label class="risk-card">
-              <input
-                type="checkbox"
-                [checked]="isDefaultRisk(risk) || selectedRiskIds().includes(risk.id)"
-                [disabled]="isDefaultRisk(risk)"
-                (change)="toggleRisk(risk.id)"
-              />
-              <strong>{{ risk.name }}</strong>
-              @if (isDefaultRisk(risk)) {
-                <small>Repli automatique pour les ports sans risque spécifique.</small>
-              }
-              <small>Activité : {{ risk.activity_name }}</small>
-              <span class="badge warning">{{ risk.default_severity }}</span>
-              <small>Impact : {{ risk.impact }}</small>
-              <small>Recommandation : {{ risk.recommendation }}</small>
-            </label>
+        <h2>Qualification automatique</h2>
+        <p class="muted">Les risques et activités sont déduits des ports. Le risque générique couvre automatiquement les ports inconnus.</p>
+        <div class="toolbar">
+          @for (risk of automaticRiskProfiles(); track risk.id) {
+            <span class="badge" [class.warning]="isDefaultRisk(risk)">{{ risk.name }}</span>
           } @empty {
-            <p class="muted">Aucun risque compatible avec les activités et ports sélectionnés.</p>
+            <span class="muted">En attente de la sélection des peers.</span>
           }
         </div>
       </section>
@@ -179,7 +161,6 @@ export class BulletinCreatePageComponent implements OnInit {
   readonly riskProfiles = signal<RiskProfile[]>([]);
   readonly selectedObservationIds = signal<number[]>([]);
   readonly selectedPeerIps = signal<string[]>([]);
-  readonly selectedRiskIds = signal<number[]>([]);
   readonly message = signal('');
   readonly bytes = formatBytes;
   readonly duration = formatDuration;
@@ -212,10 +193,6 @@ export class BulletinCreatePageComponent implements OnInit {
     });
     this.api.riskProfiles({ is_active: true, limit: 500 }).subscribe((data) => {
       this.riskProfiles.set(data.results);
-      const defaultRisk = data.results.find((risk) => risk.source_key === 'system-default-unclassified-risk');
-      if (defaultRisk && !this.selectedRiskIds().includes(defaultRisk.id)) {
-        this.selectedRiskIds.set([...this.selectedRiskIds(), defaultRisk.id]);
-      }
     });
     if (this.selectedObservationIds().length) this.loadObservations();
     if (peers.length) this.addPeers(peers, false);
@@ -307,18 +284,11 @@ export class BulletinCreatePageComponent implements OnInit {
     this.selectedPeerIps.set([...selected]);
   }
 
-  toggleRisk(id: number) {
-    const selected = new Set(this.selectedRiskIds());
-    selected.has(id) ? selected.delete(id) : selected.add(id);
-    this.selectedRiskIds.set([...selected]);
-  }
-
   creationBlockReason() {
     if (!this.structureId) return 'Sélectionne la structure du bulletin.';
     if (!this.selectedPeerIps().length) return 'Recherche et sélectionne au moins un peer.';
     if (!this.riskProfiles().length) return 'Les profils de risque ne sont pas encore chargés.';
-    if (!this.effectiveRiskIds().length) return 'Aucun profil de risque actif n’est disponible.';
-    if (this.uncoveredPeers().length) return 'Sélectionne un risque compatible avec tous les ports des peers.';
+    if (!this.effectiveRiskIds().length) return 'Le risque générique automatique est indisponible.';
     return '';
   }
 
@@ -358,27 +328,15 @@ export class BulletinCreatePageComponent implements OnInit {
     }
   }
 
-  visibleRiskProfiles() {
+  automaticRiskProfiles() {
     const ports = new Set(
       this.peerRows()
         .filter((peer) => this.selectedPeerIps().includes(peer.peer_ip))
         .flatMap((peer) => peer.host_ports)
     );
     return this.riskProfiles().filter((risk) =>
-      risk.port_services.length === 0 || risk.port_services.some((item) => ports.has(item.port))
+      this.isDefaultRisk(risk) || risk.port_services.some((item) => ports.has(item.port))
     );
-  }
-
-  uncoveredPeers() {
-    const effectiveIds = this.effectiveRiskIds();
-    const selectedRisks = this.riskProfiles().filter((risk) => effectiveIds.includes(risk.id));
-    return this.peerRows().filter((peer) => {
-      if (!this.selectedPeerIps().includes(peer.peer_ip)) return false;
-      const ports: Array<number | null> = peer.host_ports.length ? peer.host_ports : [null];
-      return ports.some((port) => !selectedRisks.some(
-        (risk) => risk.port_services.length === 0 || risk.port_services.some((item) => item.port === port)
-      ));
-    });
   }
 
   isDefaultRisk(risk: RiskProfile) {
@@ -386,8 +344,7 @@ export class BulletinCreatePageComponent implements OnInit {
   }
 
   private effectiveRiskIds() {
-    const defaultRiskIds = this.riskProfiles().filter((risk) => this.isDefaultRisk(risk)).map((risk) => risk.id);
-    return [...new Set([...this.selectedRiskIds(), ...defaultRiskIds])];
+    return this.automaticRiskProfiles().map((risk) => risk.id);
   }
 
   private groupObservations(observations: PeerObservation[]): BulletinPeerRow[] {

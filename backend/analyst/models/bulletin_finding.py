@@ -90,7 +90,10 @@ class BulletinFinding(models.Model):
                 name="uniq_finding_per_bulletin_observation_risk",
             )
         ]
-        indexes = [models.Index(fields=("severity",))]
+        indexes = [
+            models.Index(fields=("severity",)),
+            models.Index(fields=("peer_ip_snapshot",), name="analyst_bul_peer_ip_7ea2c8_idx"),
+        ]
 
     def capture_snapshot(self):
         observation = self.peer_observation

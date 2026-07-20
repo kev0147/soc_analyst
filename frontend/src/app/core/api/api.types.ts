@@ -197,7 +197,7 @@ export interface Bulletin {
   status: string;
   sent_at: string | null;
   created_at: string;
-  ips?: Array<{ ip_address: string; role: string }>;
+  ips?: Array<{ id: number; ip_address: string; role: string; port: number | null; note?: string }>;
   risks?: Array<{ id: number; name: string }>;
   activities?: Array<{ id: number; name: string }>;
   recommendations?: Array<{ id: number; name: string; description?: string }>;

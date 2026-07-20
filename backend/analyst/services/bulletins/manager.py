@@ -9,7 +9,11 @@ from analyst.models import (
     BulletinRisk,
 )
 
-from .duplicates import find_duplicate_bulletin_findings, find_duplicate_bulletins
+from .duplicates import (
+    find_bulletins_containing_peer_ips,
+    find_duplicate_bulletin_findings,
+    find_duplicate_bulletins,
+)
 
 
 SEVERITY_RANK = {
@@ -97,6 +101,12 @@ def create_bulletin_from_findings(data: dict, user, force_duplicate: bool = Fals
         structure_id=data["structure"].id,
         finding_pairs=finding_pairs,
     )
+    history_duplicates = find_bulletins_containing_peer_ips(
+        structure_id=data["structure"].id,
+        peer_ips={observation.peer_ip for observation in observations},
+    )
+    duplicate_ids = {item["id"] for item in duplicates}
+    duplicates.extend(item for item in history_duplicates if item["id"] not in duplicate_ids)
     if duplicates and not force_duplicate:
         return None, duplicates
 
