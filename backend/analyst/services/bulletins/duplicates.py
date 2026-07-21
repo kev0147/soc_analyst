@@ -78,12 +78,13 @@ def find_bulletins_containing_peer_ips(structure_id: int, peer_ips: set[str]) ->
     if not peer_ips:
         return []
     candidates = (
-        Bulletin.objects.filter(structure_id=structure_id, deleted_at__isnull=True)
+        Bulletin.objects.filter(deleted_at__isnull=True)
         .filter(
             Q(ip_addresses__ip_address__in=peer_ips)
             | Q(findings__peer_ip_snapshot__in=peer_ips)
         )
         .distinct()
+        .select_related("structure")
         .prefetch_related("ip_addresses", "findings")
     )
     results = []
@@ -96,6 +97,9 @@ def find_bulletins_containing_peer_ips(structure_id: int, peer_ips: set[str]) ->
             "id": bulletin.id,
             "reference": bulletin.reference,
             "external_reference": bulletin.external_reference,
+            "structure_id": bulletin.structure_id,
+            "structure_code": bulletin.structure.code,
+            "structure_name": bulletin.structure.name,
             "severity": bulletin.severity,
             "status": bulletin.status,
             "sent_at": bulletin.sent_at.isoformat() if bulletin.sent_at else None,

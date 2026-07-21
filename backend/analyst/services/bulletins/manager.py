@@ -113,6 +113,9 @@ def create_bulletin_from_findings(data: dict, user, force_duplicate: bool = Fals
                 "external_reference": history_duplicate["external_reference"],
                 "matched_peer_ips": history_duplicate["matched_peer_ips"],
                 "match_reason": history_duplicate["match_reason"],
+                "structure_id": history_duplicate["structure_id"],
+                "structure_code": history_duplicate["structure_code"],
+                "structure_name": history_duplicate["structure_name"],
             })
         else:
             duplicates.append(history_duplicate)

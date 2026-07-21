@@ -25,6 +25,8 @@ interface BulletinDuplicate {
   sent_at?: string | null;
   created_at?: string | null;
   matched_peer_ips?: string[];
+  structure_code?: string;
+  structure_name?: string;
 }
 
 @Component({
@@ -147,12 +149,13 @@ interface BulletinDuplicate {
           <p class="muted">Ces IPs figurent dans des bulletins existants.</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>IP</th><th>Référence</th><th>Date</th></tr></thead>
+              <thead><tr><th>IP</th><th>Référence</th><th>Structure</th><th>Date</th></tr></thead>
               <tbody>
                 @for (duplicate of duplicateWarnings(); track duplicate.reference) {
                   <tr>
                     <td>{{ duplicate.matched_peer_ips?.join(', ') || '-' }}</td>
                     <td>{{ duplicate.external_reference || duplicate.reference }}</td>
+                    <td>{{ duplicate.structure_code || '-' }}<br><span class="muted">{{ duplicate.structure_name || '' }}</span></td>
                     <td>{{ duplicateDate(duplicate) }}</td>
                   </tr>
                 }

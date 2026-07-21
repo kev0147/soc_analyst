@@ -24,7 +24,7 @@ class BulletinFromFindingsController(APIView):
             return Response(
                 {
                     "detail": "Un bulletin similaire existe déjà.",
-                    "duplicate_policy": "same_structure_peer_ip_already_documented",
+                    "duplicate_policy": "peer_ip_already_documented_in_any_structure",
                     "duplicates": duplicates,
                     "can_force": True,
                 },
