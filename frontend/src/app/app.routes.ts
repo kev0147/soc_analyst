@@ -8,6 +8,7 @@ import { FlowsPageComponent } from './pages/flows/flows-page.component';
 import { IpAnalysisPageComponent } from './pages/ip-analysis/ip-analysis-page.component';
 import { BulletinsPageComponent } from './pages/bulletins/bulletins-page.component';
 import { BulletinCreatePageComponent } from './pages/bulletin-create/bulletin-create-page.component';
+import { BulletinDetailPageComponent } from './pages/bulletin-detail/bulletin-detail-page.component';
 import { InvestigationPageComponent } from './pages/investigation/investigation-page.component';
 import { StructuresPageComponent } from './pages/structures/structures-page.component';
 import { WorkersPageComponent } from './pages/workers/workers-page.component';
@@ -32,6 +33,7 @@ export const routes: Routes = [
       { path: 'soc-peers', redirectTo: 'investigation', pathMatch: 'full' },
       { path: 'bulletins', component: BulletinsPageComponent },
       { path: 'bulletins/new', component: BulletinCreatePageComponent },
+      { path: 'bulletins/:id', component: BulletinDetailPageComponent },
       { path: 'structures', component: StructuresPageComponent },
       { path: 'catalogs', component: CatalogsPageComponent },
       { path: 'workers', component: WorkersPageComponent },

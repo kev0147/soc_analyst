@@ -193,10 +193,15 @@ export interface MaliciousCommunicationAnalysis {
 export interface Bulletin {
   id: number;
   reference: string;
+  external_reference: string;
+  structure: number;
+  structure_code: string;
+  structure_name: string;
   severity: string;
   status: string;
   sent_at: string | null;
   created_at: string;
+  updated_at: string;
   ips?: Array<{ id: number; ip_address: string; role: string; port: number | null; note?: string }>;
   risks?: Array<{ id: number; name: string }>;
   activities?: Array<{ id: number; name: string }>;
@@ -274,6 +279,7 @@ export interface BulletinFinding {
   reputation_score?: number | null;
   risk_profile_id: number;
   risk_name: string;
+  risk_activity: string;
   severity: string;
   impact: string;
   recommendation: string;

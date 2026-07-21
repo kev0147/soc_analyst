@@ -14,6 +14,8 @@ from analyst.models.choices import BulletinIPRole
 
 
 class BulletinSerializer(serializers.ModelSerializer):
+    structure_code = serializers.CharField(source="structure.code", read_only=True)
+    structure_name = serializers.CharField(source="structure.name", read_only=True)
     ips = serializers.SerializerMethodField()
     risks = serializers.SerializerMethodField()
     activities = serializers.SerializerMethodField()

@@ -107,6 +107,10 @@ export class ApiService {
     return this.http.get<PaginatedResponse<Bulletin>>(`${this.baseUrl}/bulletins/`, { params: this.params(params) });
   }
 
+  bulletin(id: number): Observable<Bulletin> {
+    return this.http.get<Bulletin>(`${this.baseUrl}/bulletins/${id}/`);
+  }
+
   createBulletin(payload: unknown): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/bulletins/create/`, payload);
   }
