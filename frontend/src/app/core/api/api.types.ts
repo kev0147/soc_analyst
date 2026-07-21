@@ -312,6 +312,7 @@ export interface TopPeer {
   host_ips: string[];
   host_ports: number[];
   services: string[];
+  protocols: string[];
   observation_ids: number[];
   observations: PeerInvestigationObservation[];
 }

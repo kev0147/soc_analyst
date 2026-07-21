@@ -115,6 +115,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
                 <small class="muted">{{ peer.successful_source_count }}/{{ peer.source_count }} source(s) réussie(s)</small>
               </div>
               <div><small class="muted">Hôtes</small><strong>{{ peer.host_count }}</strong></div>
+              <div><small class="muted">Protocole</small><strong>{{ peer.protocols.join(', ') || '-' }}</strong></div>
               <div><small class="muted">Flows</small><strong>{{ peer.flow_count }}</strong></div>
               <div><small class="muted">Volume</small><strong>{{ bytes(peer.total_bytes) }}</strong></div>
               <div><small class="muted">Durée totale</small><strong>{{ duration(peer.total_duration_seconds) }}</strong></div>
@@ -198,7 +199,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
     .peer-card { display: grid; gap: 16px; }
     .peer-summary {
       display: grid;
-      grid-template-columns: minmax(180px, 1.5fr) repeat(5, minmax(90px, auto)) auto;
+      grid-template-columns: minmax(180px, 1.5fr) repeat(6, minmax(90px, auto)) auto;
       gap: 14px;
       align-items: center;
     }

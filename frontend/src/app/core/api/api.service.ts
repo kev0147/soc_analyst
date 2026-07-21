@@ -172,7 +172,7 @@ export class ApiService {
     return this.http.get<PaginatedResponse<IpAnalysisRecord>>(`${this.baseUrl}/ip-analysis/records/`, { params: this.params(params) });
   }
 
-  launchIpAnalysis(payload: { scope: 'all_flows' | 'import'; import_id?: number; tools: string[]; force_refresh?: boolean }): Observable<{ job: BackgroundJob; already_queued: boolean }> {
+  launchIpAnalysis(payload: { scope: 'all_flows' | 'import'; import_id?: number; tools: string[]; limit?: number; force_refresh?: boolean }): Observable<{ job: BackgroundJob; already_queued: boolean }> {
     return this.http.post<{ job: BackgroundJob; already_queued: boolean }>(`${this.baseUrl}/ip-analysis/run/`, payload);
   }
 

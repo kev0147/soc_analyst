@@ -5,7 +5,7 @@ from django.db.models import Count, Max, Min, Q, Sum
 from django.db.models.functions import Coalesce
 
 from analyst.models import Flow, IPReputation, PeerObservation
-from analyst.models.choices import ReputationVerdict
+from analyst.models.choices import ReputationSource, ReputationStatus, ReputationVerdict
 from analyst.services.flows import apply_flow_filters
 from analyst.services.peer_observations import collect_peer_observation_stats
 
@@ -177,6 +177,7 @@ def top_peers(params) -> dict:
             "host_ips": set(),
             "host_ports": set(),
             "services": set(),
+            "protocols": set(),
             "networks": {},
         }
     )
@@ -199,7 +200,17 @@ def top_peers(params) -> dict:
         row = rows[peer_ip]
         row["peer_ip"] = peer_ip
         if reputation:
-            row["country"] = imported_countries.get(peer_ip) or reputation.country or row["country"]
+            successful_results = {
+                result.source: result
+                for result in reputation.results.all()
+                if result.status == ReputationStatus.SUCCESS and result.country
+            }
+            platform_country = next((
+                successful_results[source].country
+                for source in (ReputationSource.ABUSEIPDB, ReputationSource.VIRUSTOTAL)
+                if source in successful_results
+            ), "")
+            row["country"] = platform_country or reputation.country or imported_countries.get(peer_ip) or row["country"]
             row["verdict"] = reputation.verdict
             row["score"] = reputation.score
             row["source_count"] = reputation.source_count
@@ -243,6 +254,7 @@ def top_peers(params) -> dict:
             row["host_ports"].add(host_port)
         if host_service:
             row["services"].add(host_service)
+        row["protocols"].update(item.get("protocols", set()))
         row["networks"][network_id] = row["networks"].get(network_id, 0) + item["flow_count"]
 
     verdict = params.get("verdict") or params.get("peer_verdict")
@@ -337,6 +349,7 @@ def top_peers(params) -> dict:
         row["host_ips"] = sorted(row["host_ips"])
         row["host_ports"] = sorted(row["host_ports"])
         row["services"] = sorted(row["services"])
+        row["protocols"] = sorted(row["protocols"])
         row["networks"] = [
             {"network_id": network_id, "flow_count": flow_count}
             for network_id, flow_count in sorted(row["networks"].items())

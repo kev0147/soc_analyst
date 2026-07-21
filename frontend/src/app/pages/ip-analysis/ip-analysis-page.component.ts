@@ -43,6 +43,13 @@ import { IpAnalysisRecord, IpReputationSourceState, Structure } from '../../core
             @if (message()) {
               <p class="muted">{{ message() }}</p>
             }
+            <label class="field">
+              <span>Nombre maximal d’IP à analyser</span>
+              <input class="input" type="number" min="1" max="500" [(ngModel)]="limit" />
+            </label>
+            @if (lastRunSummary()) {
+              <p class="badge info">{{ lastRunSummary() }}</p>
+            }
           </div>
         </article>
 
@@ -146,6 +153,7 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly zone = inject(NgZone);
   readonly message = signal('');
+  readonly lastRunSummary = signal('');
   readonly records = signal<IpAnalysisRecord[]>([]);
   readonly structures = signal<Structure[]>([]);
   readonly sourceStates = signal<IpReputationSourceState[]>([]);
@@ -159,6 +167,7 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
     virustotal: true,
   };
   forceRefresh = false;
+  limit = 10;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit() {
@@ -175,6 +184,7 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
       scope: this.scope,
       import_id: this.importId ?? undefined,
       tools: selectedTools,
+      limit: Math.min(Math.max(this.limit || 1, 1), 500),
       force_refresh: this.forceRefresh,
     }).subscribe({
       next: (response) => {
@@ -193,7 +203,19 @@ export class IpAnalysisPageComponent implements OnInit, OnDestroy {
         next: (job) => {
           const progress = job.progress_percent === null ? job.progress_current : `${job.progress_percent}%`;
           this.message.set(job.status === 'failed' ? `Échec : ${job.error_message}` : `${job.status_message || job.status}${progress ? ` — ${progress}` : ''}`);
-          if (job.status === 'completed') { this.load(); this.loadSourceStates(); }
+          if (job.status === 'completed') {
+            const result = job.result as Record<string, any>;
+            const counts = (result['source_analysis_counts'] || {}) as Record<string, number>;
+            const candidates = Number(result['candidate_count'] || 0);
+            this.lastRunSummary.set(
+              `Analyse terminée : ${candidates} IP candidate(s), `
+              + `${counts['abuseipdb'] || 0} appel(s) AbuseIPDB, `
+              + `${counts['virustotal'] || 0} appel(s) VirusTotal.`
+              + (candidates === 0 ? ' Les résultats sont probablement encore frais ; coche « Forcer l’actualisation » pour les interroger à nouveau.' : '')
+            );
+            this.load();
+            this.loadSourceStates();
+          }
           if (job.status === 'queued' || job.status === 'running') this.poll(job.id);
         },
         error: () => this.message.set('Impossible de suivre le job.'),

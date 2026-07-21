@@ -56,6 +56,7 @@ def _flow_queryset(scope: str = "all_flows", import_id: int | None = None):
         "dst_port",
         "src_location",
         "dst_location",
+        "protocol",
         "service",
         "total_bytes",
         "total_packets",
@@ -130,6 +131,7 @@ def _collect_stats(flows, progress_callback=None):
             "max_duration_seconds": None,
             "first_seen_at": None,
             "last_seen_at": None,
+            "protocols": set(),
         }
     )
     cidr_cache = {}
@@ -157,6 +159,8 @@ def _collect_stats(flows, progress_callback=None):
         if endpoint.peer_country and not row.get("peer_country"):
             row["peer_country"] = endpoint.peer_country
         row["flow_count"] += 1
+        if flow.protocol:
+            row["protocols"].add(flow.protocol.upper())
         row["total_bytes"] += flow.total_bytes or 0
         row["total_packets"] += flow.total_packets or 0
         if flow.duration_seconds is not None:

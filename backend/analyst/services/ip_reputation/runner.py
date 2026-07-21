@@ -179,7 +179,12 @@ def _refresh_reputation(reputation: IPReputation, candidate: CandidateIP):
     reputation.successful_source_count = len(successful)
     reputation.verdict = aggregate_verdict(results)
     reputation.score = max((result.score for result in successful if result.score is not None), default=None)
-    reputation.country = next((result.country for result in successful if result.country), reputation.country)
+    successful_by_source = {result.source: result for result in successful if result.country}
+    reputation.country = next((
+        successful_by_source[source].country
+        for source in REPUTATION_TOOLS
+        if source in successful_by_source
+    ), reputation.country)
     reputation.flow_count = candidate.flow_count
     reputation.first_seen_at = candidate.first_seen_at
     reputation.last_seen_at = candidate.last_seen_at
@@ -239,6 +244,7 @@ def run_reputation_analysis(
     clients = client_classes or CLIENTS
     analyzed = []
     source_analysis_count = 0
+    source_analysis_counts = {tool: 0 for tool in selected_tools}
 
     if progress_callback:
         progress_callback(0, len(candidates), "Préparation des candidats")
@@ -251,6 +257,7 @@ def run_reputation_analysis(
                 continue
             result = clients[tool]().analyze(candidate.ip_address)
             source_analysis_count += 1
+            source_analysis_counts[tool] += 1
             if result.quota_exhausted_until:
                 source_blocks[tool] = _record_quota_exhaustion(result)
                 continue
@@ -275,6 +282,7 @@ def run_reputation_analysis(
         "candidate_count": len(candidates),
         "analyzed_count": len(analyzed),
         "source_analysis_count": source_analysis_count,
+        "source_analysis_counts": source_analysis_counts,
         "source_states": [
             {
                 "source": source,
