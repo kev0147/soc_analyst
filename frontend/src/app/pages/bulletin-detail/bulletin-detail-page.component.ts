@@ -16,6 +16,7 @@ interface BulletinPeerAggregate {
   total_packets: number;
   total_duration_seconds: number;
   risks: string[];
+  protocols: string[];
 }
 
 @Component({
@@ -37,6 +38,24 @@ interface BulletinPeerAggregate {
           <article class="card"><span class="muted">Gravité</span><strong>{{ severityLabel(item.severity) }}</strong></article>
           <article class="card"><span class="muted">Statut</span><strong>{{ item.status === 'sent' ? 'Envoyé' : 'Brouillon' }}</strong></article>
           <article class="card"><span class="muted">Date</span><strong>{{ (item.sent_at || item.created_at) | date:'dd/MM/yyyy HH:mm' }}</strong></article>
+        </section>
+
+        <section class="card report-card">
+          <div class="report-header"><h2>Rapport généré</h2><button class="btn secondary" (click)="copyReport()">Copier le rapport</button></div>
+          <div class="report-content">
+            <h3>Description</h3>
+            <p>{{ reportDescription() }}</p>
+            <h3>Informations générales</h3>
+            <p><strong>Adresses IP sources :</strong> {{ reportSourceIps() }}</p>
+            <p><strong>Adresses IP destinations :</strong> {{ reportDestinationIps() }}</p>
+            <h3>Vulnérabilités</h3>
+            <p><strong>Protocole :</strong> {{ reportProtocols() }}</p>
+            <h3>Risques</h3>
+            <ul>@for (risk of reportRisks(); track risk) {<li>{{ risk }}</li>} @empty {<li>Risque à qualifier</li>}</ul>
+            <h3>Recommandations</h3>
+            <ul>@for (recommendation of reportRecommendations(); track recommendation) {<li>{{ recommendation }}</li>} @empty {<li>Qualification et traitement à compléter.</li>}</ul>
+          </div>
+          @if (copyMessage()) {<p class="muted">{{ copyMessage() }}</p>}
         </section>
 
         <section class="card">
@@ -68,6 +87,10 @@ interface BulletinPeerAggregate {
     .summary-grid article { display:grid; gap:7px; }
     .summary-grid strong { font-size:20px; }
     .card .badge { margin:0 6px 6px 0; }
+    .report-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .report-content { line-height:1.65; }
+    .report-content h3 { margin:20px 0 6px; color:var(--brand-2); }
+    .report-content p, .report-content ul { margin:6px 0; }
     details summary { cursor:pointer; color:var(--brand-2); font-weight:700; }
     .host-list { margin:10px 0 0; padding:0; list-style:none; display:grid; gap:8px; min-width:240px; }
     .host-list li { display:grid; gap:2px; padding-bottom:7px; border-bottom:1px solid var(--line); }
@@ -80,6 +103,7 @@ export class BulletinDetailPageComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   readonly bulletin = signal<Bulletin | null>(null);
   readonly error = signal('');
+  readonly copyMessage = signal('');
   readonly peerGroups = computed(() => this.aggregatePeers(this.bulletin()));
   readonly totalBytes = computed(() => this.peerGroups().reduce((total, peer) => total + peer.total_bytes, 0));
   readonly bytes = formatBytes;
@@ -91,26 +115,68 @@ export class BulletinDetailPageComponent implements OnInit {
   }
   severityLabel(value: string) { return ({ low: 'Faible', medium: 'Moyenne', high: 'Élevée', critical: 'Critique' } as Record<string, string>)[value] || value; }
 
+  reportSourceIps() { return this.peerGroups().map((peer) => peer.peer_ip).join(', ') || '-'; }
+  reportDestinationIps() {
+    const hosts = this.peerGroups().flatMap((peer) => peer.hosts.map((host) => host.host_ip))
+      .filter((host) => !host.toLowerCase().includes('historique') && !host.toLowerCase().includes('inconnu'));
+    return [...new Set(hosts)].join(', ') || '-';
+  }
+  reportProtocols() { return [...new Set(this.peerGroups().flatMap((peer) => peer.protocols))].join('/') || 'Non renseigné'; }
+  reportRisks() { return [...new Set(this.peerGroups().flatMap((peer) => peer.risks))]; }
+  reportRecommendations() {
+    const item = this.bulletin();
+    if (!item) return [];
+    return [...new Set([...(item.recommendations || []).flatMap((recommendation) => [recommendation.name, recommendation.description || '']), ...(item.findings || []).map((finding) => finding.recommendation)].filter(Boolean))];
+  }
+  reportDescription() {
+    const peers = this.peerGroups().map((peer) => `${peer.peer_ip}${peer.country ? ` (${peer.country})` : ''}`);
+    const portServices = new Map<number, Set<string>>();
+    for (const peer of this.peerGroups()) for (const host of peer.hosts) for (const port of host.ports) {
+      const services = portServices.get(port) || new Set<string>();
+      host.services.forEach((service) => services.add(service));
+      portServices.set(port, services);
+    }
+    const targets = [...portServices.entries()].sort(([a], [b]) => a - b)
+      .map(([port, services]) => {
+        const names = services.size ? [...services] : [this.knownService(port)].filter(Boolean);
+        return `${port}${names.length ? ` (${names.join('/')})` : ''}`;
+      });
+    return `Des comportements suspects émanent des adresses IP suivantes : ${peers.join(', ') || 'aucune IP renseignée'}. `
+      + `Ces activités ciblent les ports de services suivants : ${targets.join(', ') || 'aucun port renseigné'}.`;
+  }
+  async copyReport() {
+    const lines = [
+      'Description:', this.reportDescription(), '', 'Informations générales:',
+      `Adresses IP sources: ${this.reportSourceIps()}`, `Adresses IP destinations: ${this.reportDestinationIps()}`,
+      '', 'Vulnérabilités:', `Protocole: ${this.reportProtocols()}`, '', 'Risques:',
+      ...this.reportRisks().map((risk) => `- ${risk}`), '', 'Recommandations:',
+      ...this.reportRecommendations().map((recommendation) => `- ${recommendation}`),
+    ];
+    try { await navigator.clipboard.writeText(lines.join('\n')); this.copyMessage.set('Rapport copié.'); }
+    catch { this.copyMessage.set('Copie automatique impossible. Sélectionne le texte du rapport.'); }
+  }
+
   private aggregatePeers(bulletin: Bulletin | null): BulletinPeerAggregate[] {
     if (!bulletin) return [];
-    const groups = new Map<string, BulletinPeerAggregate & { hostMap: Map<string, { ports: Set<number>; services: Set<string> }>; observations: Set<number> }>();
+    const groups = new Map<string, BulletinPeerAggregate & { hostMap: Map<string, { ports: Set<number>; services: Set<string> }>; observations: Set<number>; protocolSet: Set<string> }>();
     const getGroup = (peerIp: string) => {
       let group = groups.get(peerIp);
       if (!group) {
-        group = { peer_ip: peerIp, country: '', verdict: 'unknown', score: null, hosts: [], flow_count: 0, total_bytes: 0, total_packets: 0, total_duration_seconds: 0, risks: [], hostMap: new Map(), observations: new Set() };
+        group = { peer_ip: peerIp, country: '', verdict: 'unknown', score: null, hosts: [], flow_count: 0, total_bytes: 0, total_packets: 0, total_duration_seconds: 0, risks: [], protocols: [], hostMap: new Map(), observations: new Set(), protocolSet: new Set() };
         groups.set(peerIp, group);
       }
       return group;
     };
     for (const finding of bulletin.findings || []) {
       const group = getGroup(finding.peer_ip);
-      group.country ||= finding.peer_country || '';
+      group.country ||= this.normalizedCountry(finding.peer_country);
       if (this.verdictRank(finding.reputation_verdict) > this.verdictRank(group.verdict)) group.verdict = finding.reputation_verdict;
       if (finding.reputation_score !== null && finding.reputation_score !== undefined && (group.score === null || finding.reputation_score > group.score)) group.score = finding.reputation_score;
       const hostIp = finding.host_ip || 'Hôte inconnu';
       const host = group.hostMap.get(hostIp) || { ports: new Set<number>(), services: new Set<string>() };
       if (finding.host_port !== null) host.ports.add(finding.host_port);
       if (finding.host_service) host.services.add(finding.host_service);
+      (finding.protocols || []).forEach((protocol) => group.protocolSet.add(protocol));
       group.hostMap.set(hostIp, host);
       if (!group.observations.has(finding.peer_observation_id)) {
         group.observations.add(finding.peer_observation_id);
@@ -126,14 +192,25 @@ export class BulletinDetailPageComponent implements OnInit {
       const hostName = 'Ports documentés (historique)';
       const host = group.hostMap.get(hostName) || { ports: new Set<number>(), services: new Set<string>() };
       if (ip.port !== null) host.ports.add(ip.port);
+      const service = (ip.note || '').match(/Service:\s*([^—]+)/i)?.[1]?.trim();
+      if (service) service.split(',').map((item) => item.trim()).filter(Boolean).forEach((item) => host.services.add(item));
       group.hostMap.set(hostName, host);
     }
     return [...groups.values()].map((group) => ({
       ...group,
       hosts: [...group.hostMap.entries()].map(([host_ip, values]) => ({ host_ip, ports: [...values.ports].sort((a, b) => a - b), services: [...values.services].sort() })),
       risks: [...group.risks].sort(),
+      protocols: [...group.protocolSet].sort(),
     })).sort((a, b) => this.verdictRank(b.verdict) - this.verdictRank(a.verdict) || b.total_bytes - a.total_bytes);
   }
 
   private verdictRank(verdict: string) { return ({ malicious: 3, suspicious: 2, unknown: 1, clean: 0 } as Record<string, number>)[verdict] ?? 1; }
+  private knownService(port: number) {
+    return ({ 20: 'FTP Data', 21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 465: 'SMTPS', 5060: 'SIP', 5432: 'PostgreSQL', 3389: 'RDP' } as Record<number, string>)[port] || '';
+  }
+  private normalizedCountry(value?: string) {
+    const country = (value || '').trim();
+    const invalid = ['external tap', 'internal tap', 'external', 'internal', 'local', 'private', 'unknown', '--', '-'];
+    return invalid.includes(country.toLowerCase()) || country.toLowerCase().endsWith(' tap') ? '' : country;
+  }
 }

@@ -34,6 +34,16 @@ PORT_CATEGORIES = {
     9200: "Base de données",
 }
 
+INVALID_PEER_LOCATIONS = {
+    "external tap", "internal tap", "external", "internal", "local", "private", "unknown", "--", "-",
+}
+
+
+def normalized_peer_country(value: str | None) -> str:
+    country = (value or "").strip()
+    normalized = country.lower().replace("_", " ")
+    return "" if normalized in INVALID_PEER_LOCATIONS or normalized.endswith(" tap") else country
+
 
 @dataclass(frozen=True)
 class ObservationEndpoint:
@@ -117,7 +127,7 @@ def _observation_endpoint(flow, cidrs) -> ObservationEndpoint | None:
         host_port=host_port,
         host_service=host_service,
         host_port_category=_port_category(host_port, host_service),
-        peer_country=(peer_country or "").strip(),
+        peer_country=normalized_peer_country(peer_country),
     )
 
 
@@ -247,6 +257,7 @@ def sync_peer_observations(
     to_update = []
     update_fields = (
         "observed_country",
+        "protocols",
         "flow_count",
         "total_bytes",
         "total_packets",
@@ -277,6 +288,7 @@ def sync_peer_observations(
             host_port_category=host_port_category,
         )
         observation.observed_country = row.get("peer_country", "")
+        observation.protocols = sorted(row.get("protocols", set()))
         observation.flow_count = row["flow_count"]
         observation.total_bytes = row["total_bytes"]
         observation.total_packets = row["total_packets"]

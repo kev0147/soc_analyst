@@ -60,6 +60,13 @@ def _role(value: str | None) -> str:
     return EndpointRole.UNKNOWN
 
 
+def _location(value: str | None) -> str:
+    location = text_or_blank(value)
+    normalized = location.lower().replace("_", " ").strip()
+    invalid = {"external tap", "internal tap", "external", "internal", "local", "private", "unknown", "--", "-"}
+    return "" if normalized in invalid or normalized.endswith(" tap") else location
+
+
 def _endpoint(row: dict[str, str], prefix: str) -> Endpoint:
     technical_prefix = "searchSubject" if prefix == "Subject" else "peer"
     port, protocol_from_port = port_protocol(row.get(f"{prefix} Port/Protocol"))
@@ -77,7 +84,7 @@ def _endpoint(row: dict[str, str], prefix: str) -> Endpoint:
         # L'export lisible expose "Peer Location". Dans l'export technique
         # fourni par SNA, la même information peut être placée dans
         # peer.hostGroups/searchSubject.hostGroups (ex. "Canada").
-        location=text_or_blank(
+        location=_location(
             _first(
                 row,
                 f"{prefix} Location",

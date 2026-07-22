@@ -11,6 +11,7 @@ class BulletinFinding(models.Model):
         "host_port_snapshot",
         "host_service_snapshot",
         "host_port_category_snapshot",
+        "protocols_snapshot",
         "network_name_snapshot",
         "observation_first_seen_at_snapshot",
         "observation_last_seen_at_snapshot",
@@ -58,6 +59,7 @@ class BulletinFinding(models.Model):
     host_port_snapshot = models.PositiveIntegerField(null=True, blank=True)
     host_service_snapshot = models.CharField(max_length=128, blank=True)
     host_port_category_snapshot = models.CharField(max_length=150, blank=True)
+    protocols_snapshot = models.JSONField(default=list, blank=True)
     network_name_snapshot = models.CharField(max_length=255, blank=True)
     observation_first_seen_at_snapshot = models.DateTimeField(null=True, blank=True)
     observation_last_seen_at_snapshot = models.DateTimeField(null=True, blank=True)
@@ -104,6 +106,7 @@ class BulletinFinding(models.Model):
         self.host_port_snapshot = observation.host_port
         self.host_service_snapshot = observation.host_service
         self.host_port_category_snapshot = observation.host_port_category
+        self.protocols_snapshot = list(observation.protocols or [])
         self.network_name_snapshot = observation.network.name
         self.observation_first_seen_at_snapshot = observation.first_seen_at
         self.observation_last_seen_at_snapshot = observation.last_seen_at

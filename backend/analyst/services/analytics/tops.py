@@ -7,7 +7,7 @@ from django.db.models.functions import Coalesce
 from analyst.models import Flow, IPReputation, PeerObservation
 from analyst.models.choices import ReputationSource, ReputationStatus, ReputationVerdict
 from analyst.services.flows import apply_flow_filters
-from analyst.services.peer_observations import collect_peer_observation_stats
+from analyst.services.peer_observations import collect_peer_observation_stats, normalized_peer_country
 
 from .params import flow_filter_params_without_ordering, int_param, limit_param
 
@@ -145,8 +145,9 @@ def top_peers(params) -> dict:
     imported_countries = {}
     for key, item in stats.items():
         peer_ip = key[1]
-        if item.get("peer_country") and not imported_countries.get(peer_ip):
-            imported_countries[peer_ip] = item["peer_country"]
+        peer_country = normalized_peer_country(item.get("peer_country"))
+        if peer_country and not imported_countries.get(peer_ip):
+            imported_countries[peer_ip] = peer_country
     reputations = {}
     peer_ips = list({key[1] for key in stats.keys()})
     max_query_params = connection.features.max_query_params
@@ -160,6 +161,7 @@ def top_peers(params) -> dict:
         lambda: {
             "peer_ip": "",
             "country": "",
+            "country_source": "",
             "verdict": "unknown",
             "score": None,
             "source_count": 0,
@@ -211,6 +213,15 @@ def top_peers(params) -> dict:
                 if source in successful_results
             ), "")
             row["country"] = platform_country or reputation.country or imported_countries.get(peer_ip) or row["country"]
+            if platform_country:
+                row["country_source"] = next(
+                    source for source in (ReputationSource.ABUSEIPDB, ReputationSource.VIRUSTOTAL)
+                    if source in successful_results and successful_results[source].country == platform_country
+                )
+            elif reputation.country:
+                row["country_source"] = "reputation"
+            elif imported_countries.get(peer_ip):
+                row["country_source"] = "ndr"
             row["verdict"] = reputation.verdict
             row["score"] = reputation.score
             row["source_count"] = reputation.source_count
@@ -228,6 +239,7 @@ def top_peers(params) -> dict:
             ]
         elif imported_countries.get(peer_ip):
             row["country"] = imported_countries[peer_ip]
+            row["country_source"] = "ndr"
         row["flow_count"] += item["flow_count"]
         row["total_bytes"] += item["total_bytes"]
         row["total_packets"] += item["total_packets"]

@@ -240,6 +240,7 @@ export interface PeerObservation {
   peer_country?: string;
   reputation_verdict: 'malicious' | 'suspicious' | 'clean' | 'unknown';
   reputation_score?: number | null;
+  protocols: string[];
   host_ip: string | null;
   host_port: number | null;
   host_service: string;
@@ -271,6 +272,7 @@ export interface BulletinFinding {
   host_port: number | null;
   host_service: string;
   host_port_category: string;
+  protocols: string[];
   flow_count: number;
   total_bytes: number;
   total_packets: number;
@@ -288,6 +290,7 @@ export interface BulletinFinding {
 export interface TopPeer {
   peer_ip: string;
   country: string;
+  country_source: 'abuseipdb' | 'virustotal' | 'reputation' | 'ndr' | '';
   verdict: 'malicious' | 'suspicious' | 'clean' | 'unknown';
   score: number | null;
   source_count: number;

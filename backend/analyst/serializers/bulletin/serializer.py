@@ -59,6 +59,7 @@ class BulletinSerializer(serializers.ModelSerializer):
                 "host_port": finding.host_port_snapshot,
                 "host_service": finding.host_service_snapshot,
                 "host_port_category": finding.host_port_category_snapshot,
+                "protocols": finding.protocols_snapshot,
                 "network_name": finding.network_name_snapshot,
                 "first_seen_at": finding.observation_first_seen_at_snapshot,
                 "last_seen_at": finding.observation_last_seen_at_snapshot,

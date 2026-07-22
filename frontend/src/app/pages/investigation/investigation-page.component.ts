@@ -106,7 +106,7 @@ import { formatBytes, formatDuration } from '../../shared/formatters';
             <div class="peer-summary">
               <div>
                 <strong class="peer-ip">{{ peer.peer_ip }}</strong>
-                <span>{{ peer.country || 'Pays inconnu' }}</span>
+                <span>{{ peer.country || 'Pays inconnu' }} @if (peer.country_source) {<small class="muted">· {{ countrySourceLabel(peer.country_source) }}</small>}</span>
               </div>
               <div>
                 <span class="badge" [class.danger]="peer.verdict === 'malicious'" [class.warning]="peer.verdict === 'suspicious'" [class.success]="peer.verdict === 'clean'">
@@ -339,5 +339,9 @@ export class InvestigationPageComponent implements OnInit {
 
   private normalizedDate(value: string): string {
     return value && value.length === 16 ? `${value}:00` : value;
+  }
+
+  countrySourceLabel(source: string): string {
+    return ({ abuseipdb: 'AbuseIPDB', virustotal: 'VirusTotal', reputation: 'Réputation', ndr: 'NDR' } as Record<string, string>)[source] || source;
   }
 }

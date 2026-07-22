@@ -19,6 +19,7 @@ class PeerObservation(TimestampedModel):
     host_service = models.CharField(max_length=128, blank=True)
     host_port_category = models.CharField(max_length=150, blank=True)
     observed_country = models.CharField(max_length=255, blank=True)
+    protocols = models.JSONField(default=list, blank=True)
     first_seen_at = models.DateTimeField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
     flow_count = models.PositiveBigIntegerField(default=0)
